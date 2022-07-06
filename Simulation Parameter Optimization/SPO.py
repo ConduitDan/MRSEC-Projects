@@ -8,7 +8,44 @@ Additionally the config file will dictate if the is running on the hpcc or not a
 
 This script will set up folders for data and run simulation, creating scripts for the scheduler as needed. 
 This script does NO post processing on data, that responsibly lies with the simulation. The output of the simulation should be data that is directily comparable with the target data set.
-
 """
 
-class 
+from enum import Enum
+
+class SPOStatus(Enum):
+    STARTING = 0
+    WAITING = 1
+    READY = 2
+
+
+class SimulationParameterOptimizer:
+    def __init__(self,configFile):
+        pass
+    
+    # Check the log file to determine status of the runs.
+    def checkStatus(self):
+        logData = self.parseLog(self.logFile)
+        
+        if logData is None:
+            return SPOStatus.STARTING
+        
+
+
+
+class SPOFileParser:
+    def __init__(self,configFile):
+        pass
+    def parseData(self,dataFile):
+        pass
+    def parseLog(self,logFile):
+        logData = None
+        if
+        pass
+
+class SPOSimulationRunner:
+    def __init__ (self):
+        pass
+
+
+
+
