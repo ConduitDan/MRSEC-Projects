@@ -17,10 +17,12 @@ class SPOStatus(Enum):
     WAITING = 1
     READY = 2
 
-
 class SimulationParameterOptimizer:
     def __init__(self,configFile):
-        pass
+        myParser = SPOFileParser(configFile)
+        self.configFile = configFile
+        (self.logFile)
+
     
     # Check the log file to determine status of the runs.
     def checkStatus(self):
@@ -33,13 +35,31 @@ class SimulationParameterOptimizer:
 
 
 class SPOFileParser:
-    def __init__(self,configFile):
+    def __init__(self):
         pass
-    def parseData(self,dataFile):
+
+    def parseConfigFile(self,configFile):
+        #Open the file
+        
+        #grab the simulation command
+
+        #grab the initial parameters string
+        #make an initial parameter dictionary
+
+        #advance to the data spec
+        #grab data files, target files and specs until we run out
+
+        #grab the RunningOn option 
+
+        #return all these to the SPO
+
+
+
+        pass
+    def parseData(self,dataFile,dataSpec):
         pass
     def parseLog(self,logFile):
         logData = None
-        if
         pass
 
 class SPOSimulationRunner:
