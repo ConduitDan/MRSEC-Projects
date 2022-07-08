@@ -33,6 +33,7 @@ class SimulationParameterOptimizer:
         (self.name, self.simulationCommand, self.parameters, self.dataSpec, self.runsOn, self.method) = configParser.parseConfigFile()
 
         self.logfile = self.name + "Log.txt"
+        self.optimizerLogFile = self.name + "OptimizerLog.txt"
 
         #now add things like the iteration number to the name 
         if nameAppends is not None:
@@ -51,8 +52,13 @@ class SimulationParameterOptimizer:
                 #We're just starting up
 
                 #create the log file
+                self.createLogFiles()
 
-                pass
+                #start a run
+                self.setupAndStartRun()
+
+                #and exit
+                return
             
             case SPOStatus.WAITING: 
                 # a simulation run is finished but not all the simulation in the
@@ -62,31 +68,60 @@ class SimulationParameterOptimizer:
             case SPOStatus.READY:
                 # all the simulation in this ensemble have finished, 
                 # run an iteration of the optimizer and start the next simulation
-                pass
+                fitness = self.compareData()
+
+                # if we're below tolerance then finish up
+                if fitness<self.tol:
+                    self.finishUp()
+
+                else:
+                    # otherwise update the parameters
+                    self.updateParameters()
+
+                    # and start the next run
+                    self.setupAndStartRun()
 
             case SPOStatus.FINISHED:
                 # we have reached the end of the optimization loop, collate the
                 # results, plotting if requested  
-                pass
+                self.finishUp()
+                return
 
+    def createLogFiles(self):
+        pass
+    def setupAndStartRun(self):
+        pass
+    def compareData(self):
+        pass
+    def updateParameters(self):
+        pass
+    def finishUp(self):
+        pass
     
     # Check the log file to determine status of the runs.
     def checkStatus(self):
-        logData = self.parseLog(self.logFile)
+        logParser = SPOFileParser(self.logFile)
+        logData = logParser.parseLog()
         
         if logData is None:
             return SPOStatus.STARTING
+        pass
+    
 
 
 class SPOFileParser:
     def __init__(self,fileName):
         self.file = open(fileName,"r")
+        #keep a list of line positions so we can rewind
+        self.lastLinePos = []
+        self.lastLinePos.append(self.file.tell())
 
     def __del__(self):
         self.file.close()
 
     def parseConfigFile(self):
         #grab the name
+        header =
         assert(self._nextLine()=="name:","Configuration File Format Error, Config file must start with 'Name:'")
         name = self._nextLine()
         
@@ -110,7 +145,24 @@ class SPOFileParser:
         return (name, simulationCommand, parameters, dataSpec, runsOn, method)
 
     def parseData(self):
-        pass
+        dataSpec = []
+        while True:
+            line = self._nextLine()
+            fileNames = re.match(line,"(.*)\s+(.*)")
+            if fileNames:
+                entry = (fileNames.group(1),fileNames.group(2),self._nextLine)
+                dataSpec.append(entry)
+            else:
+                # we didn't find a file name, check that this is a section header and then rewind and return
+                sectionHeader = re.match(".*:")
+                if sectionHeader:
+                    self._rewind()
+                    break
+                else:
+                    raise Exception("Failed to read data section.")
+        return dataSpec
+
+    
     def parseLog(self):
         logData = None
         pass
@@ -136,6 +188,7 @@ class SPOFileParser:
 
     def _nextLine(self):
         #grabs the next line that isn't just a new line or comment ('#')
+        self.lastLinePos.append(self.file.tell())
         line = ""
         while len(line) == 0:
             line = self._trimLine(next(self.file))
@@ -150,6 +203,9 @@ class SPOFileParser:
         
         line = line.strip() #remove any leading or trailing whitespace
         return line
+    def _rewind(self):
+        self.file.seek(self.lastLinePos.pop())
+
 
 
 
