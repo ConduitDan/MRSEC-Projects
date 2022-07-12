@@ -23,6 +23,7 @@ from enum import Enum
 import re
 import os
 import subprocess
+from scipy.optimize import minimize
 class SPOStatus(Enum):
     STARTING = 0
     WAITING = 1
@@ -83,16 +84,12 @@ class SimulationParameterOptimizer:
 
                 else:
                     # otherwise update the parameters
-                    self.updateParameters()
+                    # first read in the parameters and residuals
+                    (parameters,residuals) = self.readLog()
+                    self.updateParameters(parameters,residuals)
 
                     # and start the next run
                     self.setupAndStartRun()
-
-            case SPOStatus.FINISHED:
-                # we have reached the end of the optimization loop, collate the
-                # results, plotting if requested  
-                self.finishUp()
-                return
 
     def writeLogFileHeader(self):
         logFile = open(self.logFileName,'a')
@@ -108,7 +105,7 @@ class SimulationParameterOptimizer:
         self.step = 0
 
     def setupAndStartRun(self):
-        #makes the folder name/step        
+        #makes the folder name/step
         os.mkdir(self.name)
         os.mkdir(self.name + "/" + self.step)
 
@@ -118,8 +115,14 @@ class SimulationParameterOptimizer:
 
     def compareData(self):
         pass
-    def updateParameters(self):
-        pass
+    def updateParameters(self,parameters,residuals):
+        # read the log to get the list of parameters and residuals
+        myOptimizer = SPOOptimizer(self.method,self.maxSteps)
+        newParamList = myOptimizer.get_next_parameters(parameters,residuals)
+        
+        for i in range(len(self.parameters)):
+            self.parameters[i][1] = newParamList[i]
+
     def finishUp(self):
         pass
     
@@ -293,7 +296,30 @@ class SPOSimulationRunner:
         subprocess.run(runString,shell=True)
 
 class SPOOptimizer:
-    def __init__(self):
-        pass
-    def get_next_parameters(self,parameters,E):
-        pass
+    def __init__(self,method,maxSteps):
+        self.method = method
+        self.step = 0
+        self.maxSteps = maxSteps
+    def get_next_parameters(self,parameters,residual):
+        minimize(self.pastValues,parameters[0],args=(parameters,residual),
+                method = self.method, options={"maxiter":self.maxSteps})
+        return self.newParam
+
+    def pastValues(self,newParam,parameters,residual):
+        # if this is a new parameter
+        if self.step>len(parameters):
+            # save the values
+            self.newParam = newParam
+            # return 0 to stop the optimization
+            return 0
+        
+        # if this is not a new parameter make sure our parameter trajectory 
+        # is valid
+        if newParam != parameters[self.step]:
+            raise Exception("ERROR: encountered Nondeterministic solver")
+        # and return the residual
+        retVal = residual[self.step]
+        self.step+=1
+        return retVal
+
+
