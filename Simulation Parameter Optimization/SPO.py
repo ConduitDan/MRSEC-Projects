@@ -21,23 +21,30 @@ comparable with the target data set.
 
 from enum import Enum
 import re
+import os
+import subprocess
 class SPOStatus(Enum):
     STARTING = 0
     WAITING = 1
     READY = 2
     FINISHED = 3
 
+class SPORunsOn(Enum):
+    Desktop = 0
+    HPCC = 1
+
+
 class SimulationParameterOptimizer:
-    def __init__(self,configFile,nameAppends = None):
+    def __init__(self,configFile,ensembleNo = None):
         configParser = SPOFileParser(configFile)
         (self.name, self.simulationCommand, self.parameters, self.dataSpec, self.runsOn, self.method) = configParser.parseConfigFile()
 
-        self.logfile = self.name + "Log.txt"
+        self.logFileName = self.name + "Log.txt"
         self.optimizerLogFile = self.name + "OptimizerLog.txt"
 
         #now add things like the iteration number to the name 
-        if nameAppends is not None:
-            self.name += nameAppends
+        if ensembleNo is not None:
+            self.ensembleNo = ensembleNo
 
     def run(self):
         # the main run function
@@ -52,7 +59,7 @@ class SimulationParameterOptimizer:
                 #We're just starting up
 
                 #create the log file
-                self.createLogFiles()
+                self.createLogFile()
 
                 #start a run
                 self.setupAndStartRun()
@@ -87,10 +94,28 @@ class SimulationParameterOptimizer:
                 self.finishUp()
                 return
 
-    def createLogFiles(self):
-        pass
+    def writeLogFileHeader(self):
+        logFile = open(self.logFileName,'a')
+        logFile.write("# "+self.name+"\n")
+        logFile.write("########################\n")
+        logFile.write("Command: " + self.simulationCommand+"\n")
+        logFile.write("Target Data: ")
+        for spec in self.dataSpec:
+            logFile.write(spec[1])
+        logFile.write("\n")
+        logFile.close()
+
+        self.step = 0
+
     def setupAndStartRun(self):
-        pass
+        #makes the folder name/step        
+        os.mkdir(self.name)
+        os.mkdir(self.name + "/" + self.step)
+
+        myRunner = SPOSimulationRunner(self.simulationCommand,self.parameters,self.runsOn)
+        myRunner.createScript()
+        myRunner.callScript()
+
     def compareData(self):
         pass
     def updateParameters(self):
@@ -121,7 +146,7 @@ class SPOFileParser:
 
     def parseConfigFile(self):
         #grab the name
-        header =
+        # header =
         assert(self._nextLine()=="name:","Configuration File Format Error, Config file must start with 'Name:'")
         name = self._nextLine()
         
@@ -207,23 +232,68 @@ class SPOFileParser:
         self.file.seek(self.lastLinePos.pop())
 
 
-
-
 class SPOSimulationRunner:
-    def __init__ (self):
-        pass
+    def __init__ (self,SPO):
+        self.command = SPO.command
+        self.parameters = SPO.parameters
+        self.runsOn = SPO.runsOn
+        self.name = SPO.name
+        if self.runsOn[0] == SPORunsOn.HPCC:
+            self.partition = SPO.partition
+        self.maxJobs = SPO.maxJobs
+        self.scriptName = "scriptRunner.sh"
+
     def setupFolder(self):
         pass
+    
+    def createCommand(self):
+        commandWithParams = self.command
+        for param in self.parameters.keys():
+            commandWithParams = re.sub("(\w)"+param+"(\w?)","$1" + self.parameters[param]+ "$2",commandWithParams)
+        return commandWithParams
+    
     def writeScript(self):
-        pass
+        file = open(self.scriptName,"w")
+
+        file.write("#!/usr/bin/bash\n")
+        match self.runsOn[0]:
+            case SPORunsOn.Desktop:
+                self.writeDesktopScript(file)
+            case SPORunsOn.HPCC:
+                self.writeHPCCScript(file,self.runsOn[1])
+        file.close()
+
+    def writeDesktopScript(self,file):
+        file.write(self.createCommand()+"\n")
+        file.write("python3"+str(__file__))
+    
+    def writeHPCCScript(self,file,ensembleSize):
+        # for not using an ensemble
+        file.write("#SBatch --job-name="+self.name+"\n")
+        file.write("#SBatch --partition="+self.partition+"\n")
+
+        if ensembleSize>1:
+            self.writeDesktopScript(file)
+        else:
+            #use a job array to submit the ensemble, 
+            file.write("#SBatch --array=1-"+ensembleSize+"%"+self.maxJobs+"\n")
+            self.writeDesktopScript(file)
+            # after the simulation finished call this script again with the 
+            # ensemble ID
+            
+            file.wrire(" $SLURM_ARRAY_TASK_ID")
+
     def runScript(self):
-        pass
+        runString = ""
+        if self.runsOn[0] == SPORunsOn.HPCC:
+            runString = "sbatch "+ self.scriptName + " &"
+        else:
+            runString = "./"+ self.scriptName + " &"
+
+        subprocess.run(runString,shell=True)
 
 class SPOOptimizer:
     def __init__(self):
         pass
-    def 
-
-
-
-
+    def get_next_parameters(self,parameters,E):
+        pass
