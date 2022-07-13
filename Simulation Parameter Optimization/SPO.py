@@ -22,7 +22,10 @@ comparable with the target data set.
 from enum import Enum
 import re
 import os
+import sys
 import subprocess
+import fileinput
+
 from scipy.optimize import minimize
 class SPOStatus(Enum):
     STARTING = 0
@@ -77,6 +80,7 @@ class SimulationParameterOptimizer:
                 # all the simulation in this ensemble have finished, 
                 # run an iteration of the optimizer and start the next simulation
                 fitness = self.compareData()
+                self.writeEndRunLog(fitness)
 
                 # if we're below tolerance then finish up
                 if fitness<self.tol:
@@ -87,11 +91,18 @@ class SimulationParameterOptimizer:
                     # first read in the parameters and residuals
                     (parameters,residuals) = self.readLog()
                     self.updateParameters(parameters,residuals)
+                    self.writeStartRunLog()
 
                     # and start the next run
                     self.setupAndStartRun()
+    def writeStartRunLog(self):
+        logFile = open(self.logFileName,'a')
+        logFile.write("Step ${self.step}    ${self.parameters}")
+        logFile.close()
 
     def writeLogFileHeader(self):
+        os.mkdir(self.name)
+        os.cd(self.name)
         logFile = open(self.logFileName,'a')
         logFile.write("# "+self.name+"\n")
         logFile.write("########################\n")
@@ -106,10 +117,9 @@ class SimulationParameterOptimizer:
 
     def setupAndStartRun(self):
         #makes the folder name/step
-        os.mkdir(self.name)
-        os.mkdir(self.name + "/" + self.step)
-
-        myRunner = SPOSimulationRunner(self.simulationCommand,self.parameters,self.runsOn)
+        myRunner = SPOSimulationRunner(self)
+        myRunner.createFolders()
+        myRunner.createLogs()
         myRunner.createScript()
         myRunner.callScript()
 
@@ -128,34 +138,100 @@ class SimulationParameterOptimizer:
     
     # Check the log file to determine status of the runs.
     def checkStatus(self):
-        logParser = SPOFileParser(self.logFile)
-        logData = logParser.parseLog()
-        
-        if logData is None:
-            return SPOStatus.STARTING
-        pass
-    
+        # if we're not using an ensemble this we are starting if there is no log
+        # or we are ready to go if the log exists
+        if os.path.exists(self.logFileName):
+            logParser = SPOFileParser(self.logFileName)
+            (self.parameters,self.residuals,self.step) = logParser.parseLogFile()
 
+        
+        else:
+            self.step = 0
+            return SPOStatus.STARTING
+
+        if self.ensembleNo is None:
+            
+                return SPOStatus.READY
+        else:
+            # if we are using an ensemble we should read the ensemble log,
+            # mark that we are done and check if everyone else is done
+            logParser = SPOEnsembleLogParser("ensembleLog.txt")
+            finished = logParser.parseLog()
+            if finished:
+                return SPOStatus.READY
+            else:
+                return SPOStatus.WAITING
+        
+        
+
+class SPOEnsembleLogParser:
+    def __init__(self,fileName):
+        self.file = fileinput.input(fileName,inplace=True)
+
+    def __del__(self):
+        self.file.close()
+    
+    def parseEnsembleLog(self,ensembleID):
+        finished = True
+        for line in fileinput.input("File3.txt", inplace=True):
+                        #look for lines that end in "Running " 
+            runningJob = re.search("Run (%d+) *. Running ",line)
+            if runningJob:
+                #we found a job that is still running
+                if int(runningJob.group(1)) == ensembleID:
+                    # we are the responsible of that job,
+                    # update that is is finished
+                    line = line.replace("Running","Finished")
+                    sys.stdout.write(line)
+
+                else:
+                    finished = False
+        return finished
 
 class SPOFileParser:
     def __init__(self,fileName):
-        self.file = open(fileName,"r")
+        self.file = open(fileName,"r+")
+        self.fileName = fileName
         #keep a list of line positions so we can rewind
         self.lastLinePos = []
         self.lastLinePos.append(self.file.tell())
+        self.floatMatch = "[-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?"
+
+
 
     def __del__(self):
         self.file.close()
 
+    def parseLogFile(self):
+        step = 0
+        params = []
+        residues = []
+        for line in self:
+            logData = re.match("Run\w+(\d*\.?\d+)\w+{(.*)}\w+E:"+self.floatMatch,line)
+            if logData:
+                step = int(logData.group(1))
+                paramList = []
+                paramPairs = logData.group(2).split(",")
+                for param in paramPairs:
+                    (name,value) = param.split(':')
+                    paramList.append([name,float(value)])
+                params.append(paramList)
+                residues.append(float(logData.group(3)))
+            else:
+                raise Exception("Error reading log file")
+        return(params,residues,step)
+
+
+
     def parseConfigFile(self):
         #grab the name
         # header =
-        assert(self._nextLine()=="name:","Configuration File Format Error, Config file must start with 'Name:'")
-        name = self._nextLine()
+        assert(self.__next__()=="name:","Configuration File Format Error, Config file must start with 'Name:'")
+        name = self.__next__()
         
         #grab the simulation command
-        assert(self._nextLine()=="Simulation:","Configuration File Format Error, Couldn't find expected 'Simulation:'")
-        simulationCommand = self._nextLine()
+        assert(self.__next__()=="Simulation:","Configuration File Format Error, Couldn't find expected 'Simulation:'")
+        simulationCommand = self.__next__()
 
         #grab the initial parameters string
         parameters = self._parseParameters()
@@ -164,21 +240,21 @@ class SPOFileParser:
         dataSpec = self._parseDataSpec()
 
         #grab the RunningOn option
-        assert(self._nextLine()=="Runs on:","Configuration File Format Error, didn't find 'Runs on:'")
-        runsOn = self._nextLine()
+        assert(self.__next__()=="Runs on:","Configuration File Format Error, didn't find 'Runs on:'")
+        runsOn = self.__next__()
 
-        assert(self._nextLine()=="Method:","Configuration File Format Error, didn't find 'Method:'")
-        method = self._nextLine()
+        assert(self.__next__()=="Method:","Configuration File Format Error, didn't find 'Method:'")
+        method = self.__next__()
         #return all these to the SPO
         return (name, simulationCommand, parameters, dataSpec, runsOn, method)
 
     def parseData(self):
         dataSpec = []
         while True:
-            line = self._nextLine()
+            line = self.__next__()
             fileNames = re.match(line,"(.*)\s+(.*)")
             if fileNames:
-                entry = (fileNames.group(1),fileNames.group(2),self._nextLine)
+                entry = (fileNames.group(1),fileNames.group(2),self.__next__)
                 dataSpec.append(entry)
             else:
                 # we didn't find a file name, check that this is a section header and then rewind and return
@@ -204,8 +280,8 @@ class SPOFileParser:
         # followed by possible white space then a colon followed by possibly more white space 
         # then it matches (0 or more digits 0 or 1 decimal points, at least one digit)
         while True:
-            line = self._nextLine()
-            param = re.search(line,"(.*):\s*(\d*\.?\d+")
+            line = self.__next__()
+            param = re.search(line,"(.*):\s*"+self.floatMatch)
             if param:
                 initialParams[param.group(1)] = float(param.group(2))
             elif line == "Data:":
@@ -214,13 +290,14 @@ class SPOFileParser:
                 raise Exception("Formatting error in initial parameters")
         return initialParams
 
-    def _nextLine(self):
+    def __next__(self):
         #grabs the next line that isn't just a new line or comment ('#')
         self.lastLinePos.append(self.file.tell())
         line = ""
         while len(line) == 0:
             line = self._trimLine(next(self.file))
         return line
+        
 
     def _trimLine(self, line):
         #look for the comment symbol
@@ -241,13 +318,39 @@ class SPOSimulationRunner:
         self.parameters = SPO.parameters
         self.runsOn = SPO.runsOn
         self.name = SPO.name
+        self.step = SPO.step
+        self.ensembleSize = 1
         if self.runsOn[0] == SPORunsOn.HPCC:
             self.partition = SPO.partition
+            self.ensembleSize = self.runsOn[1]
         self.maxJobs = SPO.maxJobs
         self.scriptName = "scriptRunner.sh"
 
-    def setupFolder(self):
-        pass
+    def setupFolders(self):
+        self.path = "parameter_step_"+self.step
+        os.makedir(self.path)
+        os.cd(self.path)
+        if self.ensembleSize>1:
+            self.setupEnsembleFolders()
+
+    def setupLogs(self):
+        self.write_parameters()
+        if self.ensembleSize>1:
+            self.setupEnsembleLog()
+
+    def write_parameters(self):
+        paramLog = open("paramlog.txt","w")
+        paramLog.write(str(self.parameters))
+        paramLog.close()
+
+    def setupEnsembleLog(self):
+        ensembleLog = open("ensembleLog.txt",'w')
+        for i in range(self.ensembleSize):
+            ensembleLog.write("Run "+str(i) + " of "+ str(self.ensembleSize) + "Running ")
+
+    def setupEnsembleFolders(self):
+        for i in range(self.ensembleSize):
+            os.mkdir(str(i))
     
     def createCommand(self):
         commandWithParams = self.command
@@ -270,16 +373,17 @@ class SPOSimulationRunner:
         file.write(self.createCommand()+"\n")
         file.write("python3"+str(__file__))
     
-    def writeHPCCScript(self,file,ensembleSize):
+    def writeHPCCScript(self,file):
         # for not using an ensemble
         file.write("#SBatch --job-name="+self.name+"\n")
         file.write("#SBatch --partition="+self.partition+"\n")
 
-        if ensembleSize>1:
+        if self.ensembleSize>1:
             self.writeDesktopScript(file)
         else:
             #use a job array to submit the ensemble, 
-            file.write("#SBatch --array=1-"+ensembleSize+"%"+self.maxJobs+"\n")
+            file.write("#SBatch --chdir " +self.path+"/$SLURM_ARRAY_TASK_ID")
+            file.write("#SBatch --array=0-"+str(self.ensembleSize-1)+"%"+self.maxJobs+"\n")
             self.writeDesktopScript(file)
             # after the simulation finished call this script again with the 
             # ensemble ID
@@ -289,9 +393,9 @@ class SPOSimulationRunner:
     def runScript(self):
         runString = ""
         if self.runsOn[0] == SPORunsOn.HPCC:
-            runString = "sbatch "+ self.scriptName + " &"
+            runString = "sbatch ../"+ self.scriptName + " &"
         else:
-            runString = "./"+ self.scriptName + " &"
+            runString = "./../"+ self.scriptName + " &"
 
         subprocess.run(runString,shell=True)
 
