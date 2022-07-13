@@ -25,6 +25,9 @@ import os
 import sys
 import subprocess
 import fileinput
+import pandas as pd
+import numpy as np
+
 
 from scipy.optimize import minimize
 class SPOStatus(Enum):
@@ -79,11 +82,11 @@ class SimulationParameterOptimizer:
             case SPOStatus.READY:
                 # all the simulation in this ensemble have finished, 
                 # run an iteration of the optimizer and start the next simulation
-                fitness = self.compareData()
-                self.writeEndRunLog(fitness)
+                residue = self.compareData()
+                self.writeResidueLog(residue)
 
                 # if we're below tolerance then finish up
-                if fitness<self.tol:
+                if residue<self.tol:
                     self.finishUp()
 
                 else:
@@ -97,8 +100,16 @@ class SimulationParameterOptimizer:
                     self.setupAndStartRun()
     def writeStartRunLog(self):
         logFile = open(self.logFileName,'a')
-        logFile.write("Step ${self.step}    ${self.parameters}")
+        logFile.write("Step ${self.step}    {")
+        for param in self.parameters:
+            logFile.write("${param[0]:param[1]}")
+            if param != self.parameters[-1]:
+                logFile.write(",")  
+        logFile.write("    ")
         logFile.close()
+    def writeResidueLog(self,residue):
+        logFile = open(self.logFileName,'a')
+        logFile.write("Residue:"+str(residue)+"\n")
 
     def writeLogFileHeader(self):
         os.mkdir(self.name)
@@ -124,7 +135,25 @@ class SimulationParameterOptimizer:
         myRunner.callScript()
 
     def compareData(self):
-        pass
+        residue = 0
+        for (dataFile,targetFile) in self.dataSpec:
+            simulationData = self.loadData(dataFile)
+            targetData = self.loadData(targetFile)
+            residue += self.calculateError(simulationData,targetData)
+        residue /= len(self.dataSpec)
+
+    def loadData(self,dataFile):
+        data = pd.read_csv(dataFile)
+        return data.DataFrame.to_numpy()
+    
+    def calculateError(self,simulationData,targetData):
+        # ensure that data sizes are the same
+        if simulationData.shape()!=targetData.shape():
+            raise Exception("Data File and Target File have different formats")
+        
+        return np.linalg.norm(simulationData-targetData)
+            
+
     def updateParameters(self,parameters,residuals):
         # read the log to get the list of parameters and residuals
         myOptimizer = SPOOptimizer(self.method,self.maxSteps)
@@ -425,5 +454,15 @@ class SPOOptimizer:
         retVal = residual[self.step]
         self.step+=1
         return retVal
+
+if __name__ == "__main__":
+    configFile = sys.argv[1]
+    ensembleNo = None
+    if sys.argc>2:
+        ensembleNo = int(sys.argv[2])
+
+    mySPO = SimulationParameterOptimizer(sys.argv[1],ensembleNo)
+
+
 
 
