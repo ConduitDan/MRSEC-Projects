@@ -449,7 +449,7 @@ class SPOSimulationRunner:
             caller = "./"
             command = bashCommand.group(1)
         else:
-            callerMatch = re.match("(.*?\s)(.*)",self.command)
+            callerMatch = re.match("(.*?\s+(?:-\S+\s+)*)(.*)",self.command)
             if callerMatch:
                 caller = callerMatch.group(1)
                 command = callerMatch.group(2)

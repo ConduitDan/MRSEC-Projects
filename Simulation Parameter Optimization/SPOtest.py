@@ -31,6 +31,16 @@ class ParserSpec(unittest.TestCase):
         self.assertEqual(runsOn,[SPO.SPORunsOn.Desktop])
         self.assertEqual(method,"L-BFGS-B")
 
+    def test_parseConfigFileMatlab(self):
+        # Look I know this test way more than just the parser
+        # The point is this will be refactored so all this logic is just in the 
+        # parser and the File and Field Specs
+        mySPO = SPO.SimulationParameterOptimizer("TestFolder/TestConfigFileMatlab.txt",None)
+        mySPO.step = 0
+        runner = SPO.SPOSimulationRunner(mySPO)
+        self.assertEqual(runner.caller,"matlab -nojvm -batch ")
+
+
     def test_read_log(self):
         parser = SPO.SPOFileParser("TestFolder/ParserTest/TestingLog.txt")
         (params,residues,step) = parser.parseLogFile()
