@@ -1,7 +1,7 @@
 #Config File For Testing
 
 Name:
-Testing
+SimpleSimTest
 
 Simulation:
 python3 testSim.py x y z
@@ -17,7 +17,7 @@ Desktop
 #HPCC 1
 
 Method:
-HyperOpt
+L-BFGS-B
 #
 #
 
