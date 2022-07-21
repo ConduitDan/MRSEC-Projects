@@ -49,7 +49,7 @@ class SimulationParameterOptimizer:
     def __init__(self,configFile,ensembleNo = None):
         configParser = SPOFileParser(configFile)
         self.configFile = configFile
-        (self.name, self.simulationCommand, self.parameters, self.dataSpec, self.runsOn, self.method) = configParser.parseConfigFile()
+        (self.name, self.simulationCommand, self.parameters, self.dataSpec, self.runsOn, self.partition, self.method) = configParser.parseConfigFile()
 
         self.logFileName = self.name +"/" + self.name + "Log.txt"
         self.optimizerLogFile = self.name + "OptimizerLog.txt"
@@ -327,6 +327,7 @@ class SPOFileParser:
         dataSpec = self._parseDataSpec()
 
         #grab the RunningOn option
+        partition = None
         self.checkHeader("Runs on:")
         runsOn = None
         runsOnStr = self.__next__()
@@ -338,15 +339,22 @@ class SPOFileParser:
             runsOn = [SPORunsOn.HPCC]
             runsOnSplit = runsOnStr.split(' ')
             if len(runsOnSplit)>1:
-                runsOn.append(runsOnSplit[1])
+                runsOn.append(int(runsOnSplit[1]))
             else:
                 runsOn.append(1)
+
+            #Now get the partition data and any extra commands
+            self.checkHeader("Partition:")
+            partition = next(self)
+
+            #self.checkHeader("Extra Slurm Commands:")
+
             
 
         self.checkHeader("Method:")
         method = self.__next__()
         #return all these to the SPO
-        return (name, simulationCommand, parameters, dataSpec, runsOn, method)
+        return (name, simulationCommand, parameters, dataSpec, runsOn,partition, method)
 
     def parseData(self):
         dataSpec = []
