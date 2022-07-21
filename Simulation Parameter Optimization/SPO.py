@@ -20,7 +20,9 @@ comparable with the target data set.
 """
 
 
-#TODO Juggle the cwd better
+#TODO refactor the parser
+#TODO what about integer parameters
+
 
 from enum import Enum
 from logging import exception
@@ -49,7 +51,7 @@ class SimulationParameterOptimizer:
     def __init__(self,configFile,ensembleNo = None):
         configParser = SPOFileParser(configFile)
         self.configFile = configFile
-        (self.name, self.simulationCommand, self.parameters, self.dataSpec, self.runsOn, self.partition, self.method) = configParser.parseConfigFile()
+        (self.name, self.simulationCommand, self.parameters, self.dataSpec, self.runsOn, self.partition,self.extraCommands, self.method) = configParser.parseConfigFile()
 
         self.logFileName = self.name +"/" + self.name + "Log.txt"
         self.optimizerLogFile = self.name + "OptimizerLog.txt"
@@ -328,6 +330,7 @@ class SPOFileParser:
 
         #grab the RunningOn option
         partition = None
+        extraCommands = []
         self.checkHeader("Runs on:")
         runsOn = None
         runsOnStr = self.__next__()
@@ -346,15 +349,20 @@ class SPOFileParser:
             #Now get the partition data and any extra commands
             self.checkHeader("Partition:")
             partition = next(self)
+            if next(self) == "Extra Script Commands:":
+                line = next(self)
+                while line != "Method:":
+                    extraCommands.append(line)
+                    line = next(self)
+                self._rewind()
 
-            #self.checkHeader("Extra Slurm Commands:")
 
             
 
         self.checkHeader("Method:")
         method = self.__next__()
         #return all these to the SPO
-        return (name, simulationCommand, parameters, dataSpec, runsOn,partition, method)
+        return (name, simulationCommand, parameters, dataSpec, runsOn,partition,extraCommands, method)
 
     def parseData(self):
         dataSpec = []
@@ -446,6 +454,7 @@ class SPOSimulationRunner:
         if self.runsOn[0] == SPORunsOn.HPCC:
             self.partition = SPO.partition
             self.ensembleSize = self.runsOn[1]
+            self.extraCommands = SPO.extraCommands
         self.maxJobs = SPO.maxJobs
         self.scriptName = "scriptRunner.sh"
     def splitCommand(self):
@@ -528,11 +537,16 @@ class SPOSimulationRunner:
         file.write("#SBatch --partition="+self.partition+"\n")
 
         if not self.ensembleSize>1:
+            for line in self.extraCommands:
+                file.write(line+'\n')
+
             self.writeDesktopScript(file)
         else:
             #use a job array to submit the ensemble, 
             file.write("#SBatch --chdir " +self.path+"/$SLURM_ARRAY_TASK_ID\n")
             file.write("#SBatch --array=0-"+str(self.ensembleSize-1)+"%"+str(self.maxJobs)+"\n")
+            for line in self.extraCommands:
+                file.write(line+'\n')
             file.write(self.createCommand())
             file.write("cd ../..\n")
             # after the simulation finished call this script again with the 
