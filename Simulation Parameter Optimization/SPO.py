@@ -75,50 +75,49 @@ class SimulationParameterOptimizer:
         
         self.path = self.name+"/parameter_step_"+str(self.step)
 
-        match status:
-            case SPOStatus.STARTING:
-                #We're just starting up
-                print("Starting Optimization")
-                #create the log file
-                self.writeLogFileHeader()
+        if status == SPOStatus.STARTING:
+            #We're just starting up
+            print("Starting Optimization")
+            #create the log file
+            self.writeLogFileHeader()
+            self.writeStartRunLog()
+
+            #start a run
+            self.setupAndStartRun()
+
+            #and exit
+            return
+        
+        elif status == SPOStatus.WAITING: 
+            # a simulation run is finished but not all the simulation in the
+            # ensemble have finished. We should just exit
+            return
+
+        elif status == SPOStatus.READY:
+            print("Step %d finished"%self.step)
+            # all the simulation in this ensemble have finished, 
+            # run an iteration of the optimizer and start the next simulation
+            residue = self.compareData()
+            self.step += 1
+            self.writeResidueLog(residue)
+            self.residuals.append(residue)
+
+            # if we're below tolerance then finish up
+            if residue<self.tol:
+                print("Found solution set %s, residue is %s"\
+                    %(str(self.parameterHistory[-1]),residue))
+                self.finishUp()
+
+            else:
+                # otherwise update the parameters
+                # first read in the parameters and residuals
+                
+                self.updateParameters(self.parameterHistory,self.residuals)
+                print("Running step %d"%self.step)
                 self.writeStartRunLog()
 
-                #start a run
+                # and start the next run
                 self.setupAndStartRun()
-
-                #and exit
-                return
-            
-            case SPOStatus.WAITING: 
-                # a simulation run is finished but not all the simulation in the
-                # ensemble have finished. We should just exit
-                return
-
-            case SPOStatus.READY:
-                print("Step %d finished"%self.step)
-                # all the simulation in this ensemble have finished, 
-                # run an iteration of the optimizer and start the next simulation
-                residue = self.compareData()
-                self.step += 1
-                self.writeResidueLog(residue)
-                self.residuals.append(residue)
-
-                # if we're below tolerance then finish up
-                if residue<self.tol:
-                    print("Found solution set %s, residue is %s"\
-                        %(str(self.parameterHistory[-1]),residue))
-                    self.finishUp()
-
-                else:
-                    # otherwise update the parameters
-                    # first read in the parameters and residuals
-                    
-                    self.updateParameters(self.parameterHistory,self.residuals)
-                    print("Running step %d"%self.step)
-                    self.writeStartRunLog()
-
-                    # and start the next run
-                    self.setupAndStartRun()
     def writeStartRunLog(self):
         logFile = open(self.logFileName,'a')
         logFile.write("Step "+str(self.step)+"    {")
@@ -288,7 +287,7 @@ class SPOFileParser:
         next(self)
         next(self)
         for line in self:
-            logData = re.match("Step\s+(\d)\s+{(.*)}.*",line)
+            logData = re.match("Step\s+(\d+)\s+{(.*)}.*",line)
             if logData:
                 step = int(logData.group(1))
                 paramList = []
@@ -515,11 +514,10 @@ class SPOSimulationRunner:
         file = open(self.path+"/"+self.scriptName,"w")
 
         file.write("#!/usr/bin/bash\n")
-        match self.runsOn[0]:
-            case SPORunsOn.Desktop:
-                self.writeDesktopScript(file)
-            case SPORunsOn.HPCC:
-                self.writeHPCCScript(file)
+        if self.runsOn[0] == SPORunsOn.Desktop:
+            self.writeDesktopScript(file)
+        elif self.runsOn[0] == SPORunsOn.HPCC:
+            self.writeHPCCScript(file)
         file.close()
         os.chmod(self.path+"/"+self.scriptName,0o755)
 
