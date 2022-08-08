@@ -13,14 +13,14 @@ Data:
 testSimData.txt testTargetData.txt
 
 Runs on:
-#Desktop
-HPCC 100
+Desktop
+#HPCC 100
 
-Partition:
-hagan-lab
+#Partition:
+#hagan-lab
 
-Extra Script Commands:
-module load anaconda/5.2_py3
+#Extra Script Commands:
+#module load anaconda/5.2_py3
 
 Method:
 L-BFGS-B

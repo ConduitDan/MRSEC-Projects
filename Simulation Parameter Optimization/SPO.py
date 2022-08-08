@@ -22,6 +22,7 @@ comparable with the target data set.
 
 #TODO refactor the parser
 #TODO what about integer parameters
+#TODO change comment character to // (so we can have slurm commands)
 
 
 from enum import Enum
