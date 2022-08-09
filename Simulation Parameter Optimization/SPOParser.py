@@ -1,6 +1,12 @@
 from dataclasses import Field
 import re
 import SPO
+# TODO:
+# [x] Config File Parser
+# [ ] Ensemble Writer
+# [ ] Log File Parser
+
+
 
 #Parser should be simple, put complexity in the file spec
 class SPOEnsembleLogParser:
@@ -38,8 +44,9 @@ class FileSpecFactory:
         self.floatMatch = "([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)"
         
     def logFileSpec(self):
-        logField = FieldSpec(format="Step\s+(\d)\s+{(.*)}\s+(:?Residue:)?"+self.floatMatch)
-        logSpec = FileSpec(logField)
+        logField = FieldSpec(format="Step\s+(\d)\s+{(.*)}\s+Residue:"+self.floatMatch)
+        lastLogField = FieldSpec(format="Step\s+(\d)\s+{(.*)}\s+")
+        logSpec = FileSpec()
         return logSpec
         
     def configFileSpec(self):
@@ -108,7 +115,27 @@ class FileSpecFactory:
 class FileSpec:
     # a Plane old file that tries to read a single field
     def __init__(self):
-        self.field = []
+        self.fields = []
+    def addFieldSpec(self,field):
+        self.fields.append(field)
+    def readFile(self,fileName):
+        #for each line try each field
+        parser = SPOFileParser(fileName)
+        # we'll rely on the parser raising a stop iteration when its done
+        # with the file
+        while parser:
+            self.findAndFillSpec(parser)
+
+        return self.makeValues()
+
+    def findAndFillSpec(self,parser):
+        # loop though all the fields until we get one that can read the line
+        for field in self.fields:
+            if field.read(parser):
+                break
+
+    def makeValues(self):
+        return list(field.value for field in self.fields)
     
 
 class HeaderFieldFileSpec(FileSpec):
@@ -116,20 +143,21 @@ class HeaderFieldFileSpec(FileSpec):
         self.fields = []
     def addFieldSpec(self,field):
         self.fields[field.header]=field
-    def readFile(self,fileName):
-        parser = SPOFileParser(fileName)
-        for line in parser:
-            if line in self.fields.keys():
-                self.fields[line].read(parser)
-            else:
-                raise Exception("Unrecognized header in file %s"%fileName)
 
+    def findAndFillSpec(self,parser):
+        line = next(parser)
+        # Find the field with a header that matches and read it
+        if line in self.fields.keys():
+            if not self.fields[line].read(parser):
+                raise Exception("Field %s is formatted incorrectly could not\
+                                match regex %s"%(self.fields[line].header,self.fields[line].format))
+        else:
+            raise Exception("Unrecognized header in file %s"%parser.fileName)
+
+    def makeValues(self):
         #now return a dictionary of file headers and their values
-        values = {}
-        for field in self.fields:
-            values[field.header] = field.value
-        return values
-
+        # for each field in the list of fields, make a dictionary of {header:value}
+        return dict(list((field.header,field.value) for field in self.fields))
 
 
 class FieldSpec:
@@ -138,7 +166,21 @@ class FieldSpec:
         self.multiLine = multiLine
         self.postProcessing = None
 
+    def matchLine(self,parser):
+        # assume what we've been given is a regular expression
+        # find the matches and report all of them in a list
+        line = next(parser)
+        matches = re.match(format,line)
+        if matches:
+            # exclude the first element of match as 
+            # it contains the whole match
+            return matches[1::]
+        return None
+
+
     def read(self, parser):
+        # Tries to match the current line to the pattern return true if we have 
+        # a match and false if we don't
         # check if our format is a callable if so call it
         if callable(self.format):
             self.format(parser)
@@ -147,8 +189,7 @@ class FieldSpec:
             self.value = self.matchLine(parser)
             # make sure we could match the line
             if not self.value:
-                raise Exception("Field %s is formatted incorrectly could not\
-                match regex %s"%(self.header,self.format))
+                return False
 
             if self.multiLine:
                 # for multi line field value should be 
@@ -165,6 +206,8 @@ class FieldSpec:
         # call postprocessing if we need to
         if self.postProcessing is not None:
             self.postProcessing()
+        return True
+        
 
 class HeaderFieldSpec():
     def __init__(self,header,format = "(.*)",postProcessing=None,multiLine = False):
@@ -172,17 +215,7 @@ class HeaderFieldSpec():
         self.format = format #default value for this takes the entire line
         self.value = None
         self.postProcessing = postProcessing
-        self.multLine = multiLine
-    def matchLine(self,parser):
-        # assume what we've been given is a regular expression
-        # find the matches and report all of them in a list
-        line = next(parser)
-        matches = re.match(format,line)
-        if matches:
-            # exclude the first element of match as 
-            # it contains the whole match
-            return matches[1::]
-        return None
+        self.multiLine = multiLine
 
 
 

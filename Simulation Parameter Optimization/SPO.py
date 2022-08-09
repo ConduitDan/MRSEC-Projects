@@ -139,8 +139,8 @@ class SimulationParameterOptimizer:
         logFile = open(self.logFileName,'a')
         logFile.write("# "+self.name+"\n")
         logFile.write("########################\n")
-        logFile.write("Command: " + self.simulationCommand+"\n")
-        logFile.write("Target Data: ")
+        logFile.write("# Command: " + self.simulationCommand+"\n")
+        logFile.write("# Target Data: ")
         for spec in self.dataSpec:
             logFile.write(spec[1])
         logFile.write("\n")
