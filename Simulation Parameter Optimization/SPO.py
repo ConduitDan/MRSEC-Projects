@@ -541,10 +541,11 @@ class SPOSimulationRunner:
             self.writeDesktopScript(file)
         else:
             #use a job array to submit the ensemble, 
-            file.write("#SBatch --chdir " +self.path+"/$SLURM_ARRAY_TASK_ID\n")
+            #file.write("#SBatch --chdir " +self.path+"/$SLURM_ARRAY_TASK_ID\n")
             file.write("#SBatch --array=0-"+str(self.ensembleSize-1)+"%"+str(self.maxJobs)+"\n")
             for line in self.extraCommands:
                 file.write(line+'\n')
+            file.write("cd " + self.path+"\n")
             file.write(self.createCommand())
             file.write("cd ../..\n")
             # after the simulation finished call this script again with the 
