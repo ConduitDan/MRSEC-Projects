@@ -473,7 +473,7 @@ class SPOSimulationRunner:
                 raise Exception("command not in a recognizable format")
         sim = command.split(' ')[0]
         cmdLineArgs = command.replace(sim+ ' ','',1)
-        sim = os.path.abspath(sim).replace(' ','\ ')
+        #sim = os.path.abspath(sim).replace(' ','\ ')
         return (caller,sim,cmdLineArgs)
 
 
@@ -573,7 +573,7 @@ class SPOOptimizer:
             paramNumbers.append([x[1] for x in param])
         try:
             minimize(self.pastValues,paramNumbers[0],args=(paramNumbers,residual),
-                method = self.method, options={"maxiter":self.maxSteps,"maxfun":self.currentStep+1})
+                method = self.method, options={"maxiter":self.maxSteps,"maxfun":self.currentStep+1,"eps":0.001})
         except StopIteration:
             pass    
         return self.newParam
