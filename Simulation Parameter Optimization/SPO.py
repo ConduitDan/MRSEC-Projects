@@ -545,7 +545,7 @@ class SPOSimulationRunner:
             file.write("#SBatch --array=0-"+str(self.ensembleSize-1)+"%"+str(self.maxJobs)+"\n")
             for line in self.extraCommands:
                 file.write(line+'\n')
-            file.write("cd " + self.path+"\n")
+            file.write("cd " + self.path+"/$SLURM_ARRAY_TASK_ID\n")
             file.write(self.createCommand())
             file.write("cd ../..\n")
             # after the simulation finished call this script again with the 
@@ -574,7 +574,7 @@ class SPOOptimizer:
             paramNumbers.append([x[1] for x in param])
         try:
             minimize(self.pastValues,paramNumbers[0],args=(paramNumbers,residual),
-                method = self.method, options={"maxiter":self.maxSteps,"maxfun":self.currentStep+1,"eps":0.001})
+                method = self.method, options={"maxiter":self.maxSteps,"maxfun":self.currentStep+1,"eps":0.05})
         except StopIteration:
             pass    
         return self.newParam
