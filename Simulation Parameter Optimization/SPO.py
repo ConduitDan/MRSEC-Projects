@@ -61,7 +61,7 @@ class SimulationParameterOptimizer:
 
 
         self.maxJobs = 100
-        self.tol = 1e-6
+        self.tol = 10
         self.maxSteps = 100
 
     def run(self):
