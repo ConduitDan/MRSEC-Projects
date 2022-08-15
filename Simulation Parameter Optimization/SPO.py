@@ -34,6 +34,7 @@ import subprocess
 import fileinput
 import pandas as pd
 import numpy as np
+import SPOParser
 
 
 from scipy.optimize import minimize
@@ -50,9 +51,17 @@ class SPORunsOn(Enum):
 
 class SimulationParameterOptimizer:
     def __init__(self,configFile,ensembleNo = None):
-        configParser = SPOFileParser(configFile)
+        config = SPOParser.FileSpecFactory().configFileSpec()
+        configValues = config.readFile(configFile)
         self.configFile = configFile
-        (self.name, self.simulationCommand, self.parameters, self.dataSpec, self.runsOn, self.partition,self.extraCommands, self.method) = configParser.parseConfigFile()
+        self.name = configValues["Name:"]
+        self.simulationCommand = configValues["Simulation:"]
+        self.parameters = configValues["Parameters:"]
+        self.dataSpec = configValues["Data:"]
+        self.runsOn = configValues["Runs On:"]
+        self.partition = configValues["Partition:"]
+        self.extraCommands = configValues["Extra Script Commands:"]
+        self.method = configValues["Method:"]
 
         self.logFileName = self.name +"/" + self.name + "Log.txt"
         self.optimizerLogFile = self.name + "OptimizerLog.txt"
@@ -210,8 +219,9 @@ class SimulationParameterOptimizer:
         # if we're not using an ensemble this we are starting if there is no log
         # or we are ready to go if the log exists
         if os.path.exists(self.logFileName):
-            logParser = SPOFileParser(self.logFileName)
-            (self.parameterHistory,self.residuals,self.step) = logParser.parseLogFile()
+
+            log = SPOParser.FileSpecFactory.logFileSpec()
+            (self.parameterHistory,self.residuals,self.step) = log.readFile(self.logFileName)
 
         
         else:
@@ -224,222 +234,14 @@ class SimulationParameterOptimizer:
         else:
             # if we are using an ensemble we should read the ensemble log,
             # mark that we are done and check if everyone else is done
-            logParser = SPOEnsembleLogParser("ensembleLog.txt")
+            logParser = SPOParser.SPOEnsembleLogParser("ensembleLog.txt")
             finished = logParser.parseLog()
             if finished:
                 return SPOStatus.READY
             else:
                 return SPOStatus.WAITING
         
-        
-
-class SPOEnsembleLogParser:
-    def __init__(self,fileName):
-        self.file = fileinput.input(fileName,inplace=True)
-
-    def __del__(self):
-        self.file.close()
     
-    def parseEnsembleLog(self,ensembleID):
-        finished = True
-        for line in self.file:
-            #look for lines that end in "Running " 
-            runningJob = re.match("Run (\d+) of \d+ Running ",line)
-            if runningJob:
-                #we found a job that is still running
-                if int(runningJob.group(1)) == ensembleID:
-                    # we are the responsible of that job,
-                    # update that is is finished
-                    line = line.replace("Running","Finished")
-                else:
-                    finished = False
-            print(line,end='')
-        return finished
-
-#the parser works by filling out a file spec
-# a file Spec is made out of fieldSpecs.
-# field specs either are header and a rule to parse the lines after
-# or 
-# class fileSpec:
-#     pass
-
-# class fieldSpec:
-#     pass
-
-class SPOFileParser:
-    def __init__(self,fileName):
-        self.file = open(fileName,"r+")
-        self.fileName = fileName
-        #keep a list of line positions so we can rewind
-        self.lastLinePos = []
-        self.lastLinePos.append(self.file.tell())
-        self.floatMatch = "([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)"
-
-
-
-    def __del__(self):
-        self.file.close()
-
-    def parseLogFile(self):
-        step = 0
-        params = []
-        residues = []
-        #skip header
-        next(self)
-        next(self)
-        next(self)
-        for line in self:
-            logData = re.match("Step\s+(\d)\s+{(.*)}.*",line)
-            if logData:
-                step = int(logData.group(1))
-                paramList = []
-                paramPairs = logData.group(2).split(",")
-                for param in paramPairs:
-                    (name,value) = param.split(':')
-                    paramList.append([name,float(value)])
-                params.append(paramList)
-                # see if there is a residue
-                resMatch = re.match(".*Residue:"+self.floatMatch,line)
-                if resMatch:
-                    residues.append(float(resMatch.group(1)))
-
-            else:
-                raise Exception("Error reading log file")
-        return(params,residues,step)
-
-    def checkHeader(self,expected):
-        header = self.__next__()
-        if header !=expected:
-            raise Exception("Configuration File Format Error, expected '"+expected+"' but found '" + header + "'.")
-
-
-    def parseConfigFile(self):
-        #grab the name
-        self.checkHeader("Name:")
-        name = self.__next__()
-        
-        #grab the simulation command
-        self.checkHeader("Simulation:")
-        simulationCommand = self.__next__()
-
-
-        #grab the initial parameters string
-        parameters = self._parseParameters()
-
-        #advance to the data spec
-        dataSpec = self._parseDataSpec()
-
-        #grab the RunningOn option
-        partition = None
-        extraCommands = []
-        self.checkHeader("Runs on:")
-        runsOn = None
-        runsOnStr = self.__next__()
-        runsOnMatch = re.match("Desktop",runsOnStr)
-        if runsOnMatch:
-            runsOn = [SPORunsOn.Desktop]
-        runsOnMatch = re.match("HPCC",runsOnStr)
-        if runsOnMatch:
-            runsOn = [SPORunsOn.HPCC]
-            runsOnSplit = runsOnStr.split(' ')
-            if len(runsOnSplit)>1:
-                runsOn.append(int(runsOnSplit[1]))
-            else:
-                runsOn.append(1)
-
-            #Now get the partition data and any extra commands
-            self.checkHeader("Partition:")
-            partition = next(self)
-            if next(self) == "Extra Script Commands:":
-                line = next(self)
-                while line != "Method:":
-                    extraCommands.append(line)
-                    line = next(self)
-                self._rewind()
-
-
-            
-
-        self.checkHeader("Method:")
-        method = self.__next__()
-        #return all these to the SPO
-        return (name, simulationCommand, parameters, dataSpec, runsOn,partition,extraCommands, method)
-
-    def parseData(self):
-        dataSpec = []
-        while True:
-            line = self.__next__()
-            fileNames = re.match(line,"(.*)\s+(.*)")
-            if fileNames:
-                entry = (fileNames.group(1),fileNames.group(2),self.__next__)
-                dataSpec.append(entry)
-            else:
-                # we didn't find a file name, check that this is a section header and then rewind and return
-                sectionHeader = re.match(".*:")
-                if sectionHeader:
-                    self._rewind()
-                    break
-                else:
-                    raise Exception("Failed to read data section.")
-        return dataSpec
-
-    def _parseDataSpec(self):
-        dataSpec =[]
-        for line in self:
-            if line == "Runs on:":
-                self._rewind()
-                break
-            dataSpec.append( line.split(" "))
-        return dataSpec
-
-
-    def _parseParameters(self):
-        initialParams = []
-        
-        # we expect a parameter name could be anything followed by a :
-        # we expect the value to be a number
-        
-        # this regex matches (any combination of non whitespace characters)
-        # followed by possible white space then a colon followed by possibly more white space 
-        # then it matches (0 or more digits 0 or 1 decimal points, at least one digit)
-        for line in self:
-            param = re.search("(.*):\s*"+self.floatMatch,line)
-            if param:
-                initialParams.append([param.group(1),float(param.group(2))])
-            elif line == "Data:":
-                break
-            else:
-                # print(line)
-                raise Exception("Formatting error in initial parameters")
-        return initialParams
-
-    def __next__(self):
-        #grabs the next line that isn't just a new line or comment ('#')
-        lastLine = self.file.tell()
-        self.lastLinePos.append(lastLine)
-        
-        line = ""
-        while len(line) == 0:
-            line = self.file.readline()
-            if self.file.tell() == lastLine:
-                raise StopIteration
-            line = self._trimLine(line)
-            lastLine = self.file.tell()
-
-        return line
-        
-    def __iter__(self):
-        return self
-    def _trimLine(self, line):
-        #look for the comment symbol
-        comment = re.search("(.*)#",line)
-        # if its found
-        if comment:
-            line = comment.group(1) # grab the first group as the line
-        line = line.strip() #remove any leading or trailing whitespace
-        return line
-    def _rewind(self):
-        self.file.seek(self.lastLinePos.pop())
 
 
 class SPOSimulationRunner:
@@ -611,6 +413,11 @@ if __name__ == "__main__":
 
     mySPO = SimulationParameterOptimizer(sys.argv[1],ensembleNo)
     mySPO.run()
+
+
+
+
+
 
 
 

@@ -1,10 +1,11 @@
 from dataclasses import Field
 import re
 import SPO
+import fileinput
 # TODO:
 # [x] Config File Parser
 # [ ] Ensemble Writer
-# [ ] Log File Parser
+# [x] Log File Parser
 
 
 
@@ -44,9 +45,41 @@ class FileSpecFactory:
         self.floatMatch = "([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)"
         
     def logFileSpec(self):
-        logField = FieldSpec(format="Step\s+(\d)\s+{(.*)}\s+Residue:"+self.floatMatch)
-        lastLogField = FieldSpec(format="Step\s+(\d)\s+{(.*)}\s+")
         logSpec = FileSpec()
+
+
+
+        # post processing for reading from a log file
+        def logFieldPPFactor(value):
+            value[0] = int(value[0])
+            paramList = []
+            paramPairs = value[1].split(",")
+            for param in paramPairs:
+                (name,value) = param.split(':')
+                paramList.append([name,float(value)])
+            value[1] = paramList
+            if len(value==3):
+                value[2] = float(value[2])
+            return value
+        # how to use the post processing for most of the log
+        def logFieldPP(self):
+            for i in range(len(self.value)):
+                self.value[i] = logFieldPPFactor(self.value[i])
+        
+        #how to use the post processing for the last part of the log
+        def lastLogFieldPP(self):
+            self.value = logFieldPPFactor(self.value)
+                
+
+        logField = FieldSpec(format="Step\s+(\d)\s+{(.*)}\s+Residue:"+self.floatMatch,\
+        postProcessing = logFieldPP)
+        logSpec.addFieldSpec(logField)
+        
+        lastLogField = FieldSpec(format="Step\s+(\d)\s+{(.*)}\s+",multiLine=False,\
+            postProcessing = lastLogFieldPP)
+        logSpec.addFieldSpec(lastLogField)
+
+
         return logSpec
         
     def configFileSpec(self):
@@ -140,7 +173,7 @@ class FileSpec:
 
 class HeaderFieldFileSpec(FileSpec):
     def __init__(self):
-        self.fields = []
+        self.fields = {}
     def addFieldSpec(self,field):
         self.fields[field.header]=field
 
@@ -209,7 +242,7 @@ class FieldSpec:
         return True
         
 
-class HeaderFieldSpec():
+class HeaderFieldSpec(FieldSpec):
     def __init__(self,header,format = "(.*)",postProcessing=None,multiLine = False):
         self.header = header
         self.format = format #default value for this takes the entire line
@@ -228,33 +261,6 @@ class SPOFileParser:
         self.lastLinePos.append(self.file.tell())
     def __del__(self):
         self.file.close()
-
-    def parseLogFile(self):
-        step = 0
-        params = []
-        residues = []
-        #skip header
-        next(self)
-        next(self)
-        next(self)
-        for line in self:
-            logData = re.match("Step\s+(\d)\s+{(.*)}.*",line)
-            if logData:
-                step = int(logData.group(1))
-                paramList = []
-                paramPairs = logData.group(2).split(",")
-                for param in paramPairs:
-                    (name,value) = param.split(':')
-                    paramList.append([name,float(value)])
-                params.append(paramList)
-                # see if there is a residue
-                resMatch = re.match(".*Residue:"+self.floatMatch,line)
-                if resMatch:
-                    residues.append(float(resMatch.group(1)))
-
-            else:
-                raise Exception("Error reading log file")
-        return(params,residues,step)
 
     def __next__(self):
         #grabs the next line that isn't just a new line or comment ('#')

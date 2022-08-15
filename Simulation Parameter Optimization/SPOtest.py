@@ -9,6 +9,7 @@ import numpy as np
 
 
 class ParserSpec(unittest.TestCase):
+    
     def test_read_line(self):
         parser = SPO.SPOFileParser("TestFolder/ParserTest/TestParserBasic.txt")
         self.assertEqual(list(parser),["Test Line"])
@@ -100,6 +101,7 @@ class simulation_runner_tests(unittest.TestCase):
         self.simpleSPO.configFile = "TestFolder/TestConfigFile"
         self.simpleSPO.partition = "guest"
         self.simpleSPO.maxJobs = 10
+        self.simpleSPO.extraCommands =[]
         os.mkdir(self.simpleSPO.name)
 
     def tearDown(self):
