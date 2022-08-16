@@ -31,7 +31,7 @@ class SPOEnsembleLogParser:
                     # update that is is finished
                     line = line.replace("Running","Finished")
                     finishedCounter +=1
-            finishedJob = re.match("Run \d+ of (\d+) Finished")
+            finishedJob = re.match("Run \d+ of (\d+) Finished",line)
             if finishedJob:
                 finishedCounter +=1
                 ensembleSize = int(finishedJob.group(1))
