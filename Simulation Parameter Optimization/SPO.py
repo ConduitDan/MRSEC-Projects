@@ -402,6 +402,8 @@ class SPOOptimizer:
         try:
             outPut = minimize(self.pastValues,paramNumbers[0],args=(paramNumbers,residual),
                 method = self.method, options={"maxiter":self.maxSteps,"maxfun":self.currentStep+1,"eps":0.05})
+            if not hasattr(self,'newParam'):
+                print(outPut)
         except StopIteration:
             print(outPut)    
         return self.newParam
