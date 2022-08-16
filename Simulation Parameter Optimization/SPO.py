@@ -84,7 +84,6 @@ class SimulationParameterOptimizer:
         
         status = self.checkStatus()
         
-        self.path = self.configuration["Name:"]+"/parameter_step_"+str(self.step)
 
         if status == SPOStatus.STARTING:
             #We're just starting up
@@ -238,10 +237,13 @@ class SimulationParameterOptimizer:
             self.step = linesWithOutResidue[1]
             self.parameterHistory = params
             self.residuals = residues
+            self.path = self.configuration["Name:"]+"/parameter_step_"+str(self.step)
+
 
         
         else:
             self.step = 0
+            self.path = self.configuration["Name:"]+"/parameter_step_"+str(self.step)
             return SPOStatus.STARTING
 
         if self.ensembleNo is None:
@@ -250,7 +252,7 @@ class SimulationParameterOptimizer:
         else:
             # if we are using an ensemble we should read the ensemble log,
             # mark that we are done and check if everyone else is done
-            logParser = SPOParser.SPOEnsembleLogParser("ensembleLog.txt")
+            logParser = SPOParser.SPOEnsembleLogParser(self.path + "/ensembleLog.txt")
             finished = logParser.parseEnsembleLog()
             if finished:
                 return SPOStatus.READY
