@@ -5,6 +5,8 @@ SimpleSimTest
 
 Simulation:
 python3 testSim.py x y z
+
+Parameters:
 x: 1
 y: 2.2
 z: -2
@@ -12,15 +14,15 @@ z: -2
 Data:
 testSimData.txt testTargetData.txt
 
-Runs on:
-#Desktop
-HPCC 100
+Runs On:
+Desktop
+#HPCC 100
 
-Partition:
-hagan-lab
+#Partition:
+#hagan-lab
 
-Extra Script Commands:
-module load anaconda/5.2_py3
+#Extra Script Commands:
+#module load anaconda/5.2_py3
 
 Method:
 L-BFGS-B
