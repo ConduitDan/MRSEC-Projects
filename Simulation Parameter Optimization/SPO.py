@@ -357,8 +357,8 @@ class SPOSimulationRunner:
     
     def writeHPCCScript(self,file):
         # for not using an ensemble
-        file.write("#SBatch --job-name="+self.configuration["Name:"]+"\n")
-        file.write("#SBatch --partition="+self.configuration["Partition:"]+"\n")
+        file.write("#SBATCH --job-name="+self.configuration["Name:"]+"\n")
+        file.write("#SBATCH --partition="+self.configuration["Partition:"]+"\n")
 
         if not self.configuration["Runs On:"][1]>1:
             for line in self.configuration["Extra Commands:"]:
@@ -368,8 +368,8 @@ class SPOSimulationRunner:
         else:
             #use a job array to submit the ensemble, 
 
-            #file.write("#SBatch --chdir " +self.path+"/$SLURM_ARRAY_TASK_ID\n")
-            file.write("#SBatch --array=0-"+str(self.ensembleSize-1)+"%"+str(self.maxJobs)+"\n")
+            #file.write("#SBATCH --chdir " +self.path+"/$SLURM_ARRAY_TASK_ID\n")
+            file.write("#SBATCH --array=0-"+str(self.ensembleSize-1)+"%"+str(self.maxJobs)+"\n")
             for line in self.extraCommands:
                 file.write(line+'\n')
             file.write("cd " + self.path+"/$SLURM_ARRAY_TASK_ID\n")
