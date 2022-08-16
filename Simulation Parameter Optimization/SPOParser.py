@@ -50,32 +50,29 @@ class FileSpecFactory:
 
 
         # post processing for reading from a log file
-        def logFieldPPFactor(value):
-            value[0] = int(value[0])
+        def parseParams(paramStr):
             paramList = []
-            paramPairs = value[1].split(",")
+            paramPairs = paramStr.split(",")
             for param in paramPairs:
                 (name,value) = param.split(':')
                 paramList.append([name,float(value)])
-            value[1] = paramList
-            if len(value==3):
-                value[2] = float(value[2])
-            return value
+            return paramList
+
         # how to use the post processing for most of the log
         def logFieldPP(self):
             for i in range(len(self.value)):
-                self.value[i] = logFieldPPFactor(self.value[i])
+                self.value[i] = [parseParams(self.value[i][0]),float(self.value[i][1])]
         
         #how to use the post processing for the last part of the log
         def lastLogFieldPP(self):
-            self.value = logFieldPPFactor(self.value)
+            self.value = [parseParams(self.value[1]),int(self.value[0])]
                 
 
-        logField = FieldSpec(format="Step\s+(\d)\s+{(.*)}\s+Residue:"+self.floatMatch,\
+        logField = FieldSpec(pattern="Step\s+\d+\s+{(.*)}\s+Residue:"+self.floatMatch,\
         postProcessing = logFieldPP)
         logSpec.addFieldSpec(logField)
         
-        lastLogField = FieldSpec(format="Step\s+(\d)\s+{(.*)}\s+",multiLine=False,\
+        lastLogField = FieldSpec(pattern="Step\s+(\d+)\s+{(.*)}",multiLine=False,\
             postProcessing = lastLogFieldPP)
         logSpec.addFieldSpec(lastLogField)
 
@@ -103,14 +100,18 @@ class FileSpecFactory:
         configSpec.addFieldSpec(methodField)
         # dataFileField matches file names
         # look for some not white space then a period then some word characters
-        fileNameRegex = "(\S*\.w+)" 
+        fileNameRegex = "(\S*\.\w+)" 
         dataFileField = HeaderFieldSpec("Data:",\
-            format=fileNameRegex + "\s+" + fileNameRegex,multiLine=True)
+            pattern=fileNameRegex + "\s+" + fileNameRegex,multiLine=True)
         configSpec.addFieldSpec(dataFileField)
         # parameters look for alphanumerics and underscores followed by a colon
         # then a float
+        def paramPostProcess(self):
+            for i in range(len(self.value)):
+                self.value[i] = [self.value[i][0],float(self.value[i][1])]
+
         paramField = HeaderFieldSpec("Parameters:",\
-            format = "(.*):\s*"+self.floatMatch,multiLine = True)
+            pattern = "(.*):\s*"+self.floatMatch,multiLine = True,postProcessing=paramPostProcess)
         configSpec.addFieldSpec(paramField)
 
         # now the more complicated fields
@@ -121,7 +122,7 @@ class FileSpecFactory:
             # check if we match "Desktop"
             runsOnMatch = re.match("Desktop",self.value)
             if runsOnMatch:
-                self.value = [SPO.SPORunsOn.Desktop]
+                self.value = [SPO.SPORunsOn.Desktop,1]
             else:
             # check if we match HPCC
                 line = self.value
@@ -156,15 +157,15 @@ class FileSpec:
         parser = SPOFileParser(fileName)
         # we'll rely on the parser raising a stop iteration when its done
         # with the file
-        while parser:
-            self.findAndFillSpec(parser)
+        for line in parser:
+            self.findAndFillSpec(line,parser)
 
         return self.makeValues()
 
-    def findAndFillSpec(self,parser):
+    def findAndFillSpec(self,line,parser):
         # loop though all the fields until we get one that can read the line
         for field in self.fields:
-            if field.read(parser):
+            if field.read(line,parser):
                 break
 
     def makeValues(self):
@@ -177,79 +178,102 @@ class HeaderFieldFileSpec(FileSpec):
     def addFieldSpec(self,field):
         self.fields[field.header]=field
 
-    def findAndFillSpec(self,parser):
-        line = next(parser)
+    def findAndFillSpec(self,line,parser):
         # Find the field with a header that matches and read it
         if line in self.fields.keys():
-            if not self.fields[line].read(parser):
+            nextLine = next(parser)
+            if not self.fields[line].read(nextLine,parser):
                 raise Exception("Field %s is formatted incorrectly could not\
-                                match regex %s"%(self.fields[line].header,self.fields[line].format))
+                                match regex %s with line %s"%(self.fields[line].header,self.fields[line].pattern, nextLine))
         else:
-            raise Exception("Unrecognized header in file %s"%parser.fileName)
+            raise Exception("Unrecognized header %s in file %s"%(line,parser.fileName))
 
     def makeValues(self):
         #now return a dictionary of file headers and their values
         # for each field in the list of fields, make a dictionary of {header:value}
-        return dict(list((field.header,field.value) for field in self.fields))
+        return dict(list((self.fields[field].header,self.fields[field].value) for field in self.fields))
 
 
-class FieldSpec:
-    def __init__(self,format = "(.*)",multiLine = True,postProcessing=None):
-        self.format = format
+class FieldSpec(object):
+    def __init__(self,pattern = "(.*)",multiLine = True,postProcessing=None):
+        self.pattern = pattern
         self.multiLine = multiLine
-        self.postProcessing = None
+        if multiLine:
+            self.value = []
+        else:
+            self.value = None
+        self.postProcessing = postProcessing
+    def safeGetNextLine(self,parser):
+        try:
+            line = next(parser)
+            return line
+        except StopIteration:
+            return None
 
-    def matchLine(self,parser):
+
+    def matchLine(self,line):
         # assume what we've been given is a regular expression
         # find the matches and report all of them in a list
-        line = next(parser)
-        matches = re.match(format,line)
-        if matches:
-            # exclude the first element of match as 
-            # it contains the whole match
-            return matches[1::]
+
+        # make sure line is not None
+        if line:
+            
+            matches = re.match(self.pattern,line)
+            if matches:
+                # return the tuple of matches
+                retval = matches.groups()
+                # if we only have one value unpack the tuple
+                if len(retval) == 1:
+                    retval = retval[0]
+                return retval
+        
         return None
 
 
-    def read(self, parser):
+    def read(self, line, parser):
         # Tries to match the current line to the pattern return true if we have 
         # a match and false if we don't
-        # check if our format is a callable if so call it
-        if callable(self.format):
-            self.format(parser)
-        elif isinstance(self.format,str):
+        # check if our pattern is a callable if so call it
+        if callable(self.pattern):
+            self.pattern(parser)
+        elif isinstance(self.pattern,str):
             # always read the first line
-            self.value = self.matchLine(parser)
+            lineValue = self.matchLine(line)
             # make sure we could match the line
-            if not self.value:
+            if not lineValue:
                 return False
+
 
             if self.multiLine:
                 # for multi line field value should be 
                 # a list of value on the lines
 
-                self.value = [self.value] 
-                nextVal = self.matchLine(parser)
+                self.value.append(lineValue)
+                line = self.safeGetNextLine(parser) 
+                nextVal = self.matchLine(line)
                 while nextVal:
                     self.value.append(nextVal)
-                    nextVal = self.matchLine(parser)
+                    line = self.safeGetNextLine(parser)
+                    nextVal = self.matchLine(line)
                 # This kind of read will always go one past the end so we need to rewind
                 parser.rewind()
+
+            else:
+                self.value = lineValue
+
+
+                
                 
         # call postprocessing if we need to
         if self.postProcessing is not None:
-            self.postProcessing()
+            self.postProcessing(self)
         return True
         
 
 class HeaderFieldSpec(FieldSpec):
-    def __init__(self,header,format = "(.*)",postProcessing=None,multiLine = False):
+    def __init__(self,header,pattern = "(.*)",multiLine = False,postProcessing=None):
         self.header = header
-        self.format = format #default value for this takes the entire line
-        self.value = None
-        self.postProcessing = postProcessing
-        self.multiLine = multiLine
-
+        super(HeaderFieldSpec,self).__init__(pattern = pattern,multiLine = multiLine,postProcessing =postProcessing)
 
 
 class SPOFileParser:

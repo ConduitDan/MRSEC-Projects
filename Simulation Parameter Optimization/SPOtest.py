@@ -2,6 +2,7 @@ from asyncio import subprocess
 import unittest
 import os
 import SPO
+import SPOParser
 import subprocess
 import types
 import shutil
@@ -11,26 +12,27 @@ import numpy as np
 class ParserSpec(unittest.TestCase):
     
     def test_read_line(self):
-        parser = SPO.SPOFileParser("TestFolder/ParserTest/TestParserBasic.txt")
+        parser = SPOParser.SPOFileParser("TestFolder/ParserTest/TestParserBasic.txt")
         self.assertEqual(list(parser),["Test Line"])
 
     def test_whitespace_skip(self):
-        parser = SPO.SPOFileParser("TestFolder/ParserTest/TestParserWhiteSpace.txt")
+        parser = SPOParser.SPOFileParser("TestFolder/ParserTest/TestParserWhiteSpace.txt")
         self.assertEqual(list(parser),["test Line","next Line"])
 
     def test_comments(self):
-        parser = SPO.SPOFileParser("TestFolder/ParserTest/TestParserComment.txt")
+        parser = SPOParser.SPOFileParser("TestFolder/ParserTest/TestParserComment.txt")
         self.assertEqual(list(parser),["content"])
 
+class FileSpec(unittest.TestCase):
     def test_parseConfigFile(self):
-        parser = SPO.SPOFileParser("TestFolder/TestConfigFile.txt")
-        (name, simulationCommand, parameters, dataSpec, runsOn, method) = parser.parseConfigFile()
-        self.assertEqual(name,"SimpleSimTest")
-        self.assertEqual(simulationCommand,"python3 testSim.py x y z")
-        self.assertEqual(parameters,[["x",1],["y",2.2],["z",-2]])
-        self.assertEqual(dataSpec,[["testSimData.txt", "testTargetData.txt"]])
-        self.assertEqual(runsOn,[SPO.SPORunsOn.Desktop])
-        self.assertEqual(method,"L-BFGS-B")
+        configFile = SPOParser.FileSpecFactory().configFileSpec()
+        vals = configFile.readFile("TestFolder/TestConfigFile.txt")
+        self.assertEqual(vals["Name:"],"SimpleSimTest")
+        self.assertEqual(vals["Simulation:"],"python3 testSim.py x y z")
+        self.assertEqual(vals["Parameters:"],[["x",1],["y",2.2],["z",-2]])
+        self.assertEqual(vals["Data:"],[("testSimData.txt", "testTargetData.txt")])
+        self.assertEqual(vals["Runs On:"],[SPO.SPORunsOn.Desktop,1])
+        self.assertEqual(vals["Method:"],"L-BFGS-B")
 
     def test_parseConfigFileMatlab(self):
         # Look I know this test way more than just the parser
@@ -43,8 +45,16 @@ class ParserSpec(unittest.TestCase):
 
 
     def test_read_log(self):
-        parser = SPO.SPOFileParser("TestFolder/ParserTest/TestingLog.txt")
-        (params,residues,step) = parser.parseLogFile()
+        log = SPOParser.FileSpecFactory().logFileSpec()
+        vals = log.readFile("TestFolder/ParserTest/TestingLog.txt")
+        linesWithResidue = vals[0]
+        linesWithOutResidue = vals[1]
+        params = list(val[0] for val in linesWithResidue)
+        params.append(linesWithOutResidue[0])
+
+        residues = list(val[1] for val in linesWithResidue)
+
+        step = linesWithOutResidue[1]
         self.assertEqual(params,[[["x",1],["y",2.2],["z",-2]],[["x",2],["y",3],["z",4]]])
         self.assertEqual(residues,[47.630624000000005])
         self.assertEqual(step,1)
@@ -55,7 +65,7 @@ class ParserSpec(unittest.TestCase):
         f.write("Run 0 of 2 Running \n")
         f.write("Run 1 of 2 Running ")
         f.close()
-        myParser = SPO.SPOEnsembleLogParser("TestFolder/ParserTest/ensembleLogReady.txt")
+        myParser = SPOParser.SPOEnsembleLogParser("TestFolder/ParserTest/ensembleLogReady.txt")
         self.assertFalse(myParser.parseEnsembleLog(1))
         self.assertTrue(myParser.parseEnsembleLog(0))
         
@@ -76,7 +86,7 @@ class data_read_tests(unittest.TestCase):
 
     def test_read_ensemble_data(self):
         mySPO = SPO.SimulationParameterOptimizer("TestFolder/TestConfigFile.txt",None)
-        mySPO.runsOn = [SPO.SPORunsOn.HPCC,2]
+        mySPO.configuration["Runs On:"] = [SPO.SPORunsOn.HPCC,2]
         mySPO.path = "TestFolder/TestData/"
         ensembleData = mySPO.getSimData("TestData.txt")
         self.assertTrue((ensembleData==np.array([2,3])).all())
@@ -93,19 +103,22 @@ class data_read_tests(unittest.TestCase):
 class simulation_runner_tests(unittest.TestCase):
     def setUp(self):
         self.simpleSPO = types.SimpleNamespace()
-        self.simpleSPO.simulationCommand = "matlab testcommand x1 x2 "
-        self.simpleSPO.parameters = [["x1",1],["x2",2]]
-        self.simpleSPO.runsOn = [SPO.SPORunsOn.Desktop]
-        self.simpleSPO.name = "Simulation_runner_tests"
+        config = {"Simulation:":"matlab testcommand x1 x2 ",
+                    "Name:":"Simulation_runner_tests",
+                    "Runs On:":[SPO.SPORunsOn.Desktop,1],
+                    "Partition:":"guest",
+                    "Extra Commands:":"",
+                    "Parameters:":[["x1",1],["x2",2]]}
+
+        self.simpleSPO.configuration = config
+
         self.simpleSPO.step = 0
         self.simpleSPO.configFile = "TestFolder/TestConfigFile"
-        self.simpleSPO.partition = "guest"
         self.simpleSPO.maxJobs = 10
-        self.simpleSPO.extraCommands =[]
-        os.mkdir(self.simpleSPO.name)
+        os.mkdir(self.simpleSPO.configuration["Name:"])
 
     def tearDown(self):
-        shutil.rmtree(self.simpleSPO.name)
+        shutil.rmtree(self.simpleSPO.configuration["Name:"])
         
     def test_desktop_run_folder(self):
         runner = SPO.SPOSimulationRunner(self.simpleSPO)
@@ -118,7 +131,7 @@ class simulation_runner_tests(unittest.TestCase):
         script = open("Simulation_runner_tests/parameter_step_0/scriptRunner.sh")
 
         self.assertEqual(script.readline(),"#!/usr/bin/bash\n")
-        self.assertEqual(script.readline(),"cd %s/parameter_step_0\n"%self.simpleSPO.name)
+        self.assertEqual(script.readline(),"cd %s/parameter_step_0\n"%self.simpleSPO.configuration["Name:"])
         file = os.getcwd() + "/testcommand"
 
         self.assertEqual(script.readline(),"matlab " + file.replace(' ','\ ') + "  1 2  \n")
@@ -127,7 +140,7 @@ class simulation_runner_tests(unittest.TestCase):
         script.close()
 
     def test_hpcc_run_folder(self):
-        self.simpleSPO.runsOn = [SPO.SPORunsOn.HPCC,1]
+        self.simpleSPO.configuration["Runs On:"] =  [SPO.SPORunsOn.HPCC,1]
         runner = SPO.SPOSimulationRunner(self.simpleSPO)
         runner.createFolders()
         self.assertTrue(os.path.isdir("Simulation_runner_tests/parameter_step_0"))
@@ -142,7 +155,7 @@ class simulation_runner_tests(unittest.TestCase):
         self.assertEqual(script.readline(),"#SBatch --job-name=Simulation_runner_tests\n")
         self.assertEqual(script.readline(),"#SBatch --partition=guest\n")
 
-        self.assertEqual(script.readline(),"cd %s/parameter_step_0\n"%self.simpleSPO.name)
+        self.assertEqual(script.readline(),"cd %s/parameter_step_0\n"%self.simpleSPO.configuration["Name:"])
         file = os.getcwd() + "/testcommand"
 
         self.assertEqual(script.readline(),"matlab " + file.replace(' ','\ ') + "  1 2  \n")
@@ -151,7 +164,7 @@ class simulation_runner_tests(unittest.TestCase):
         script.close()
 
     def test_hpcc_ensemble_run_folder(self):
-        self.simpleSPO.runsOn = [SPO.SPORunsOn.HPCC,2]
+        self.simpleSPO.configuration["Runs On:"] = [SPO.SPORunsOn.HPCC,2]
         runner = SPO.SPOSimulationRunner(self.simpleSPO)
         runner.createFolders()
         self.assertTrue(os.path.isdir("Simulation_runner_tests/parameter_step_0/0"))
@@ -178,6 +191,8 @@ class simulation_runner_tests(unittest.TestCase):
 class systemTest(unittest.TestCase):
     def test_simpleSimulation(self):
         os.system("(cd TestFolder; python3 ../SPO.py TestConfigFile.txt)")
+        # shutil.rmtree(self.simpleSPO.configuration["Name:"])
+        
 
 
 if __name__ == '__main__':

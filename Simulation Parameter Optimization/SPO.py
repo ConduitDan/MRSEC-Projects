@@ -54,17 +54,18 @@ class SimulationParameterOptimizer:
         config = SPOParser.FileSpecFactory().configFileSpec()
         configValues = config.readFile(configFile)
         self.configFile = configFile
-        self.name = configValues["Name:"]
-        self.simulationCommand = configValues["Simulation:"]
-        self.parameters = configValues["Parameters:"]
-        self.dataSpec = configValues["Data:"]
-        self.runsOn = configValues["Runs On:"]
-        self.partition = configValues["Partition:"]
-        self.extraCommands = configValues["Extra Script Commands:"]
-        self.method = configValues["Method:"]
+        self.configuration = configValues
+        # self.name = configValues["Name:"]
+        # self.simulationCommand = configValues["Simulation:"]
+        # self.parameters = configValues["Parameters:"]
+        # self.dataSpec = configValues["Data:"]
+        # self.runsOn = configValues["Runs On:"]
+        # self.partition = configValues["Partition:"]
+        # self.extraCommands = configValues["Extra Script Commands:"]
+        # self.method = configValues["Method:"]
 
-        self.logFileName = self.name +"/" + self.name + "Log.txt"
-        self.optimizerLogFile = self.name + "OptimizerLog.txt"
+        self.logFileName = self.configuration["Name:"] +"/" + self.configuration["Name:"] + "Log.txt"
+        self.optimizerLogFile = self.configuration["Name:"] + "OptimizerLog.txt"
 
         #now add things like the iteration number to the name 
         self.ensembleNo = ensembleNo
@@ -83,7 +84,7 @@ class SimulationParameterOptimizer:
         
         status = self.checkStatus()
         
-        self.path = self.name+"/parameter_step_"+str(self.step)
+        self.path = self.configuration["Name:"]+"/parameter_step_"+str(self.step)
 
         match status:
             case SPOStatus.STARTING:
@@ -132,9 +133,9 @@ class SimulationParameterOptimizer:
     def writeStartRunLog(self):
         logFile = open(self.logFileName,'a')
         logFile.write("Step "+str(self.step)+"    {")
-        for param in self.parameters:
+        for param in self.configuration["Parameters:"]:
             logFile.write(param[0]+":"+str(param[1]))
-            if param != self.parameters[-1]:
+            if param != self.configuration["Parameters:"][-1]:
                 logFile.write(",")
         logFile.write("}    ")
         logFile.close()
@@ -144,13 +145,13 @@ class SimulationParameterOptimizer:
         logFile.write("Residue:"+str(residue)+"\n")
 
     def writeLogFileHeader(self):
-        os.mkdir(self.name)
+        os.mkdir(self.configuration["Name:"])
         logFile = open(self.logFileName,'a')
-        logFile.write("# "+self.name+"\n")
+        logFile.write("# "+self.configuration["Name:"]+"\n")
         logFile.write("########################\n")
-        logFile.write("# Command: " + self.simulationCommand+"\n")
+        logFile.write("# Command: " + self.configuration["Simulation:"]+"\n")
         logFile.write("# Target Data: ")
-        for spec in self.dataSpec:
+        for spec in self.configuration["Data:"]:
             logFile.write(spec[1])
         logFile.write("\n")
         logFile.close()
@@ -167,21 +168,26 @@ class SimulationParameterOptimizer:
 
     def compareData(self):
         residue = 0
-        for (dataFile,targetFile) in self.dataSpec:
+        for (dataFile,targetFile) in self.configuration["Data:"]:
             simulationData = self.getSimData(dataFile)
             targetData = self.loadData(targetFile)
             residue += self.calculateError(simulationData,targetData)
-        residue /= len(self.dataSpec)
+        residue /= len(self.configuration["Data:"])
         return residue
 
     def getSimData(self,dataFile):
-        if self.runsOn[0] == SPORunsOn.HPCC and self.runsOn[1]>1:
-                simulationData = self.loadData(self.path+"/0/"+dataFile)
-                for i in range(1,self.runsOn[1]):
-                    simulationData += self.loadData(self.path+'/'+str(i) + '/'+dataFile)
-                simulationData /= self.runsOn[1]
-        else:
-            simulationData = self.loadData(self.path+"/"+dataFile)
+        try:
+            if self.configuration["Runs On:"][0] == SPORunsOn.HPCC and self.configuration["Runs On:"][1]>1:
+                    simulationData = self.loadData(self.path+"/0/"+dataFile)
+                    for i in range(1,self.configuration["Runs On:"][1]):
+                        simulationData += self.loadData(self.path+'/'+str(i) + '/'+dataFile)
+                    simulationData /= self.configuration["Runs On:"][1]
+            else:
+                simulationData = self.loadData(self.path+"/"+dataFile)
+        except FileNotFoundError:
+            # if we don't find the error we should fall back to running the simulation again.
+            simulationData = None
+
         return simulationData
 
     def loadData(self,dataFile):
@@ -204,11 +210,11 @@ class SimulationParameterOptimizer:
 
     def updateParameters(self,parameters,residuals):
         # read the log to get the list of parameters and residuals
-        myOptimizer = SPOOptimizer(self.method,self.maxSteps,self.step)
+        myOptimizer = SPOOptimizer(self.configuration["Method:"],self.maxSteps,self.step)
         newParamList = myOptimizer.get_next_parameters(parameters,residuals)
         
-        for i in range(len(self.parameters)):
-            self.parameters[i][1] = newParamList[i]
+        for i in range(len(self.configuration["Parameters:"])):
+            self.configuration["Parameters:"][i][1] = newParamList[i]
 
     def finishUp(self):
         print("Finishing up")
@@ -220,8 +226,19 @@ class SimulationParameterOptimizer:
         # or we are ready to go if the log exists
         if os.path.exists(self.logFileName):
 
-            log = SPOParser.FileSpecFactory.logFileSpec()
-            (self.parameterHistory,self.residuals,self.step) = log.readFile(self.logFileName)
+            log = SPOParser.FileSpecFactory().logFileSpec()
+            vals = log.readFile(self.logFileName)
+            linesWithResidue = vals[0]
+            linesWithOutResidue = vals[1]
+            params = list(val[0] for val in linesWithResidue)
+            params.append(linesWithOutResidue[0])
+
+            residues = list(val[1] for val in linesWithResidue)
+
+
+            self.step = linesWithOutResidue[1]
+            self.parameterHistory = params
+            self.residuals = residues
 
         
         else:
@@ -246,30 +263,31 @@ class SimulationParameterOptimizer:
 
 class SPOSimulationRunner:
     def __init__ (self,SPO):
-        self.command = SPO.simulationCommand
+        self.configuration = SPO.configuration
+        # self.command = SPO.simulationCommand
         (self.caller,self.sim,self.cmdLineArgs) = self.splitCommand()
-        self.parameters = SPO.parameters
-        self.runsOn = SPO.runsOn
-        self.name = SPO.name
+        # self.parameters = SPO.parameters
+        # self.runsOn = SPO.runsOn
+        # self.name = SPO.name
         self.step = SPO.step
         self.configFile = SPO.configFile
-        self.ensembleSize = 1
-        if self.runsOn[0] == SPORunsOn.HPCC:
-            self.partition = SPO.partition
-            self.ensembleSize = self.runsOn[1]
-            self.extraCommands = SPO.extraCommands
+        # self.configuration["Runs On:"][1] = 1
+        # if self.runsOn[0] == SPORunsOn.HPCC:
+            # self.partition = SPO.partition
+            # self.configuration["Runs On:"][1] = self.runsOn[1]
+            # self.extraCommands = SPO.extraCommands
         self.maxJobs = SPO.maxJobs
         self.scriptName = "scriptRunner.sh"
     def splitCommand(self):
         #first try and match ./
-        bashCommand = re.match("./(.*)",self.command)
+        bashCommand = re.match("./(.*)",self.configuration["Simulation:"])
         caller = ""
         command = ""
         if bashCommand:
             caller = "./"
             command = bashCommand.group(1)
         else:
-            callerMatch = re.match("(.*?\s+(?:-\S+\s+)*)(.*)",self.command)
+            callerMatch = re.match("(.*?\s+(?:-\S+\s+)*)(.*)",self.configuration["Simulation:"])
             if callerMatch:
                 caller = callerMatch.group(1)
                 command = callerMatch.group(2)
@@ -282,35 +300,35 @@ class SPOSimulationRunner:
 
 
     def createFolders(self):
-        self.path = self.name+"/parameter_step_"+str(self.step)
+        self.path = self.configuration["Name:"]+"/parameter_step_"+str(self.step)
         os.mkdir(self.path)
-        if self.ensembleSize>1:
+        if self.configuration["Runs On:"][1]>1:
             self.setupEnsembleFolders()
 
     def createLogs(self):
         self.write_parameters()
-        if self.ensembleSize>1:
+        if self.configuration["Runs On:"][1]>1:
             self.setupEnsembleLog()
 
     def write_parameters(self):
         paramLog = open(self.path+"/paramlog.txt","w")
-        paramLog.write(str(self.parameters))
+        paramLog.write(str(self.configuration["Parameters:"]))
         paramLog.close()
 
     def setupEnsembleLog(self):
         ensembleLog = open(self.path+"ensembleLog.txt",'w')
-        for i in range(self.ensembleSize):
-            ensembleLog.write("Run "+str(i) + " of "+ str(self.ensembleSize) + "Running ")
+        for i in range(self.configuration["Runs On:"][1]):
+            ensembleLog.write("Run "+str(i) + " of "+ str(self.configuration["Runs On:"][1]) + "Running ")
         ensembleLog.close()
 
     def setupEnsembleFolders(self):
-        for i in range(self.ensembleSize):
+        for i in range(self.configuration["Runs On:"][1]):
             os.mkdir(self.path+'/' +str(i))
     
     def createCommand(self):
         commandWithParams = self.cmdLineArgs
         commandWithParams = " "+commandWithParams+" "
-        for param in self.parameters:
+        for param in self.configuration["Parameters:"]:
             commandWithParams = re.sub(" "+param[0]+" "," "+str(param[1])+" ",commandWithParams)
         return self.caller + self.sim + ' ' + commandWithParams+"\n"
     
@@ -318,11 +336,14 @@ class SPOSimulationRunner:
         file = open(self.path+"/"+self.scriptName,"w")
 
         file.write("#!/usr/bin/bash\n")
-        match self.runsOn[0]:
-            case SPORunsOn.Desktop:
-                self.writeDesktopScript(file)
-            case SPORunsOn.HPCC:
-                self.writeHPCCScript(file)
+        # don't know why these enums can't be equal
+        # so we're just gonna use the values
+        if self.configuration["Runs On:"][0].value == SPORunsOn.Desktop.value:
+            self.writeDesktopScript(file)
+        elif self.configuration["Runs On:"][0].value is SPORunsOn.HPCC.value:
+            self.writeHPCCScript(file)
+        else:
+            raise Exception("Unrecognized Runs On option.")
         file.close()
         os.chmod(self.path+"/"+self.scriptName,0o755)
 
@@ -336,19 +357,19 @@ class SPOSimulationRunner:
     
     def writeHPCCScript(self,file):
         # for not using an ensemble
-        file.write("#SBatch --job-name="+self.name+"\n")
-        file.write("#SBatch --partition="+self.partition+"\n")
+        file.write("#SBatch --job-name="+self.configuration["Name:"]+"\n")
+        file.write("#SBatch --partition="+self.configuration["Partition:"]+"\n")
 
-        if not self.ensembleSize>1:
-            for line in self.extraCommands:
+        if not self.configuration["Runs On:"][1]>1:
+            for line in self.configuration["Extra Commands:"]:
                 file.write(line+'\n')
 
             self.writeDesktopScript(file)
         else:
             #use a job array to submit the ensemble, 
             file.write("#SBatch --chdir " +self.path+"/$SLURM_ARRAY_TASK_ID\n")
-            file.write("#SBatch --array=0-"+str(self.ensembleSize-1)+"%"+str(self.maxJobs)+"\n")
-            for line in self.extraCommands:
+            file.write("#SBatch --array=0-"+str(self.configuration["Runs On:"][1]-1)+"%"+str(self.maxJobs)+"\n")
+            for line in self.configuration["Extra Commands:"]:
                 file.write(line+'\n')
             file.write(self.createCommand())
             file.write("cd ../..\n")
@@ -358,7 +379,7 @@ class SPOSimulationRunner:
 
     def runScript(self):
         runString = ""
-        if self.runsOn[0] == SPORunsOn.HPCC:
+        if self.configuration["Runs On:"][0] == SPORunsOn.HPCC:
             runString = "sbatch "+self.path+"/"+ self.scriptName + " &"
         else:
             runString = self.path+"/"+ self.scriptName + " &"

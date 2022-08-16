@@ -5,6 +5,8 @@ SimpleSimTest
 
 Simulation:
 python3 testSim.py x y z
+
+Parameters:
 x: 1
 y: 2.2
 z: -2
@@ -12,7 +14,7 @@ z: -2
 Data:
 testSimData.txt testTargetData.txt
 
-Runs on:
+Runs On:
 Desktop
 #HPCC 100
 
