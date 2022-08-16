@@ -253,7 +253,7 @@ class SimulationParameterOptimizer:
             # if we are using an ensemble we should read the ensemble log,
             # mark that we are done and check if everyone else is done
             logParser = SPOParser.SPOEnsembleLogParser(self.path + "/ensembleLog.txt")
-            finished = logParser.parseEnsembleLog(self.ensembleID)
+            finished = logParser.parseEnsembleLog(self.ensembleNo)
             if finished:
                 return SPOStatus.READY
             else:
