@@ -93,50 +93,49 @@ class SimulationParameterOptimizer:
         
         self.path = self.configuration["Name:"]+"/parameter_step_"+str(self.step)
 
-        match status:
-            case SPOStatus.STARTING:
-                #We're just starting up
-                print("Starting Optimization")
-                #create the log file
-                self.writeLogFileHeader()
+        if status == SPOStatus.STARTING:
+            #We're just starting up
+            print("Starting Optimization")
+            #create the log file
+            self.writeLogFileHeader()
+            self.writeStartRunLog()
+
+            #start a run
+            self.setupAndStartRun()
+
+            #and exit
+            return
+        
+        elif status == SPOStatus.WAITING: 
+            # a simulation run is finished but not all the simulation in the
+            # ensemble have finished. We should just exit
+            return
+
+        elif status == SPOStatus.READY:
+            print("Step %d finished"%self.step)
+            # all the simulation in this ensemble have finished, 
+            # run an iteration of the optimizer and start the next simulation
+            residue = self.compareData()
+            self.step += 1
+            self.writeResidueLog(residue)
+            self.residuals.append(residue)
+
+            # if we're below tolerance then finish up
+            if residue<self.tol:
+                print("Found solution set %s, residue is %s"\
+                    %(str(self.parameterHistory[-1]),residue))
+                self.finishUp()
+
+            else:
+                # otherwise update the parameters
+                # first read in the parameters and residuals
+                
+                self.updateParameters(self.parameterHistory,self.residuals)
+                print("Running step %d"%self.step)
                 self.writeStartRunLog()
 
-                #start a run
+                # and start the next run
                 self.setupAndStartRun()
-
-                #and exit
-                return
-            
-            case SPOStatus.WAITING: 
-                # a simulation run is finished but not all the simulation in the
-                # ensemble have finished. We should just exit
-                return
-
-            case SPOStatus.READY:
-                print("Step %d finished"%self.step)
-                # all the simulation in this ensemble have finished, 
-                # run an iteration of the optimizer and start the next simulation
-                residue = self.compareData()
-                self.step += 1
-                self.writeResidueLog(residue)
-                self.residuals.append(residue)
-
-                # if we're below tolerance then finish up
-                if residue<self.tol:
-                    print("Found solution set %s, residue is %s"\
-                        %(str(self.parameterHistory[-1]),residue))
-                    self.finishUp()
-
-                else:
-                    # otherwise update the parameters
-                    # first read in the parameters and residuals
-                    
-                    self.updateParameters(self.parameterHistory,self.residuals)
-                    print("Running step %d"%self.step)
-                    self.writeStartRunLog()
-
-                    # and start the next run
-                    self.setupAndStartRun()
     def writeStartRunLog(self):
         logFile = open(self.logFileName,'a')
         logFile.write("Step "+str(self.step)+"    {")
@@ -264,8 +263,7 @@ class SimulationParameterOptimizer:
                 return SPOStatus.READY
             else:
                 return SPOStatus.WAITING
-        
-    
+
 
 
 class SPOSimulationRunner:
@@ -302,7 +300,7 @@ class SPOSimulationRunner:
                 raise Exception("command not in a recognizable format")
         sim = command.split(' ')[0]
         cmdLineArgs = command.replace(sim+ ' ','',1)
-        sim = os.path.abspath(sim).replace(' ','\ ')
+        #sim = os.path.abspath(sim).replace(' ','\ ')
         return (caller,sim,cmdLineArgs)
 
 
@@ -323,9 +321,10 @@ class SPOSimulationRunner:
         paramLog.close()
 
     def setupEnsembleLog(self):
-        ensembleLog = open(self.path+"ensembleLog.txt",'w')
-        for i in range(self.configuration["Runs On:"][1]):
-            ensembleLog.write("Run "+str(i) + " of "+ str(self.configuration["Runs On:"][1]) + "Running ")
+
+        ensembleLog = open(self.path+"/ensembleLog.txt",'w')
+        for i in range(self.ensembleSize):
+            ensembleLog.write("Run "+str(i) + " of "+ str(self.ensembleSize) + " Running\n")
         ensembleLog.close()
 
     def setupEnsembleFolders(self):
@@ -351,6 +350,7 @@ class SPOSimulationRunner:
             self.writeHPCCScript(file)
         else:
             raise Exception("Unrecognized Runs On option.")
+
         file.close()
         os.chmod(self.path+"/"+self.scriptName,0o755)
 
@@ -374,10 +374,12 @@ class SPOSimulationRunner:
             self.writeDesktopScript(file)
         else:
             #use a job array to submit the ensemble, 
-            file.write("#SBatch --chdir " +self.path+"/$SLURM_ARRAY_TASK_ID\n")
-            file.write("#SBatch --array=0-"+str(self.configuration["Runs On:"][1]-1)+"%"+str(self.maxJobs)+"\n")
-            for line in self.configuration["Extra Commands:"]:
+
+            #file.write("#SBatch --chdir " +self.path+"/$SLURM_ARRAY_TASK_ID\n")
+            file.write("#SBatch --array=0-"+str(self.ensembleSize-1)+"%"+str(self.maxJobs)+"\n")
+            for line in self.extraCommands:
                 file.write(line+'\n')
+            file.write("cd " + self.path+"/$SLURM_ARRAY_TASK_ID\n")
             file.write(self.createCommand())
             file.write("cd ../..\n")
             # after the simulation finished call this script again with the 
@@ -406,7 +408,7 @@ class SPOOptimizer:
             paramNumbers.append([x[1] for x in param])
         try:
             minimize(self.pastValues,paramNumbers[0],args=(paramNumbers,residual),
-                method = self.method, options={"maxiter":self.maxSteps,"maxfun":self.currentStep+1})
+                method = self.method, options={"maxiter":self.maxSteps,"maxfun":self.currentStep+1,"eps":0.05})
         except StopIteration:
             pass    
         return self.newParam
@@ -441,12 +443,3 @@ if __name__ == "__main__":
 
     mySPO = SimulationParameterOptimizer(sys.argv[1],ensembleNo)
     mySPO.run()
-
-
-
-
-
-
-
-
-
