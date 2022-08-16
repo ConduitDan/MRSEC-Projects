@@ -358,7 +358,9 @@ class SPOSimulationRunner:
     def writeHPCCScript(self,file):
         # for not using an ensemble
         file.write("#SBATCH --job-name="+self.configuration["Name:"]+"\n")
-        file.write("#SBATCH --partition="+self.configuration["Partition:"]+"\n")
+        file.write("#SBATCH --account="+self.configuration["Account:"]+"\n")
+        if self.configuration["Partition:"] is not None:
+            file.write("#SBATCH --partition="+self.configuration["Partition:"]+"\n")
 
         if not self.configuration["Runs On:"][1]>1:
             for line in self.configuration["Extra Commands:"]:
