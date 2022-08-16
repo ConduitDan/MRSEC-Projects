@@ -1,6 +1,5 @@
 # Testing
-########################
-Command: python3 testSim.py x y z
-Target Data: testTargetData.txt
+# Command: python3 testSim.py x y z
+# Target Data: testTargetData.txt
 Step 0    {x:1.0,y:2.2,z:-2.0}    Residue:47.630624000000005
 Step 1    {x:2,y:3,z:4}
