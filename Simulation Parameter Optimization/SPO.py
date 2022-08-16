@@ -316,8 +316,8 @@ class SPOSimulationRunner:
     def setupEnsembleLog(self):
 
         ensembleLog = open(self.path+"/ensembleLog.txt",'w')
-        for i in range(self.ensembleSize):
-            ensembleLog.write("Run "+str(i) + " of "+ str(self.ensembleSize) + " Running\n")
+        for i in range(self.configuration["Runs On:"][1]):
+            ensembleLog.write("Run "+str(i) + " of "+ str(self.configuration["Runs On:"][1]) + " Running\n")
         ensembleLog.close()
 
     def setupEnsembleFolders(self):
