@@ -51,10 +51,20 @@ class SPORunsOn(Enum):
 
 class SimulationParameterOptimizer:
     def __init__(self,configFile,ensembleNo = None):
+        self.maxJobs = 100
+        self.tol = 1e-6
+        self.maxSteps = 100
+
+
+
         config = SPOParser.FileSpecFactory().configFileSpec()
         configValues = config.readFile(configFile)
         self.configFile = configFile
         self.configuration = configValues
+
+        if self.configuration["Tolerance:"] is None:
+            self.configuration["Tolerance:"] = self.tol
+
         # self.name = configValues["Name:"]
         # self.simulationCommand = configValues["Simulation:"]
         # self.parameters = configValues["Parameters:"]
@@ -71,9 +81,6 @@ class SimulationParameterOptimizer:
         self.ensembleNo = ensembleNo
 
 
-        self.maxJobs = 100
-        self.tol = 1e-6
-        self.maxSteps = 100
 
     def run(self):
         # the main run function

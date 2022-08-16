@@ -8,7 +8,7 @@ import fileinput
 # [x] Log File Parser
 
 
-
+floatMatch = "([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)"
 #Parser should be simple, put complexity in the file spec
 class SPOEnsembleLogParser:
     def __init__(self,fileName):
@@ -38,16 +38,9 @@ class SPOEnsembleLogParser:
 # field specs either are header and a rule to parse the lines after
 # or 
 
-# two options here, inherite from fileSpec every time I need a thing
-# or make a 
 class FileSpecFactory:
-    def __init__(self):
-        self.floatMatch = "([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)"
-        
     def logFileSpec(self):
         logSpec = FileSpec()
-
-
 
         # post processing for reading from a log file
         def parseParams(paramStr):
@@ -68,7 +61,7 @@ class FileSpecFactory:
             self.value = [parseParams(self.value[1]),int(self.value[0])]
                 
 
-        logField = FieldSpec(pattern="Step\s+\d+\s+{(.*)}\s+Residue:"+self.floatMatch,\
+        logField = FieldSpec(pattern="Step\s+\d+\s+{(.*)}\s+Residue:"+floatMatch,\
         postProcessing = logFieldPP)
         logSpec.addFieldSpec(logField)
         
@@ -98,6 +91,13 @@ class FileSpecFactory:
 
         methodField = HeaderFieldSpec("Method:")
         configSpec.addFieldSpec(methodField)
+        
+        tolField = HeaderFieldNumberFileSpec("Tolerance:")
+        configSpec.addFieldSpec(tolField)
+        
+        
+        
+        
         # dataFileField matches file names
         # look for some not white space then a period then some word characters
         fileNameRegex = "(\S*\.\w+)" 
@@ -111,7 +111,7 @@ class FileSpecFactory:
                 self.value[i] = [self.value[i][0],float(self.value[i][1])]
 
         paramField = HeaderFieldSpec("Parameters:",\
-            pattern = "(.*):\s*"+self.floatMatch,multiLine = True,postProcessing=paramPostProcess)
+            pattern = "(.*):\s*"+floatMatch,multiLine = True,postProcessing=paramPostProcess)
         configSpec.addFieldSpec(paramField)
 
         # now the more complicated fields
@@ -274,6 +274,13 @@ class HeaderFieldSpec(FieldSpec):
     def __init__(self,header,pattern = "(.*)",multiLine = False,postProcessing=None):
         self.header = header
         super(HeaderFieldSpec,self).__init__(pattern = pattern,multiLine = multiLine,postProcessing =postProcessing)
+class HeaderFieldNumberFileSpec(FieldSpec):
+    def convertToFloat(self):
+        self.value = float(self.value)
+    def __init__(self,header,pattern = floatMatch,multiLine = False,postProcessing=convertToFloat):
+        self.header = header
+        super(HeaderFieldSpec,self).__init__(pattern = pattern,multiLine = multiLine,postProcessing =postProcessing)
+
 
 
 class SPOFileParser:
