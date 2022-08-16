@@ -92,6 +92,8 @@ class FileSpecFactory:
 
         partitionField = HeaderFieldSpec("Partition:")
         configSpec.addFieldSpec(partitionField)
+        accoutField = HeaderFieldSpec("Account:")
+        configSpec.addFieldSpec(accoutField)
         
         extraScriptCommandsField = HeaderFieldSpec("Extra Commands:",multiLine = True)
         configSpec.addFieldSpec(extraScriptCommandsField)
