@@ -374,7 +374,7 @@ class SPOSimulationRunner:
                 file.write(line+'\n')
             file.write("cd " + self.path+"/$SLURM_ARRAY_TASK_ID\n")
             file.write(self.createCommand())
-            file.write("cd ../..\n")
+            file.write("cd ../../..\n")
             # after the simulation finished call this script again with the 
             # ensemble ID
             file.write("python3 "+str(__file__).replace(" ",r'\ ') + " " + self.configFile+" $SLURM_ARRAY_TASK_ID\n")
