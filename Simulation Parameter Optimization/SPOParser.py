@@ -18,20 +18,29 @@ class SPOEnsembleLogParser:
         self.file.close()
     
     def parseEnsembleLog(self,ensembleID):
-        finished = True
+        finished = False
+        ensembleSize = -1
+        finishedCounter = 0
         for line in self.file:
             #look for lines that end in "Running " 
-            runningJob = re.match("Run (\d+) of \d+ Running ",line)
+            runningJob = re.match("Run (\d+) of \d+ Running",line)
             if runningJob:
                 #we found a job that is still running
                 if int(runningJob.group(1)) == ensembleID:
                     # we are the responsible of that job,
                     # update that is is finished
                     line = line.replace("Running","Finished")
-                else:
-                    finished = False
+                    finishedCounter +=1
+            finishedJob = re.match("Run \d+ of (\d+) Finished")
+            if finishedJob:
+                finishedCounter +=1
+                ensembleSize = int(finishedJob.group(1))
+            if not (finishedJob or runningJob):
+                raise Exception("Could not read line %s in ensemble file"%line)
+
             print(line,end='')
-        return finished
+
+        return finishedCounter == ensembleSize
 
 #the parser works by filling out a file spec
 # a file Spec is made out of fieldSpecs.

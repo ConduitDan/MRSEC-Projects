@@ -175,7 +175,7 @@ class SimulationParameterOptimizer:
 
     def getSimData(self,dataFile):
         try:
-            if self.configuration["Runs On:"][0] == SPORunsOn.HPCC and self.configuration["Runs On:"][1]>1:
+            if self.configuration["Runs On:"][0].value == SPORunsOn.HPCC.value and self.configuration["Runs On:"][1]>1:
                     simulationData = self.loadData(self.path+"/0/"+dataFile)
                     for i in range(1,self.configuration["Runs On:"][1]):
                         simulationData += self.loadData(self.path+'/'+str(i) + '/'+dataFile)
@@ -253,7 +253,7 @@ class SimulationParameterOptimizer:
             # if we are using an ensemble we should read the ensemble log,
             # mark that we are done and check if everyone else is done
             logParser = SPOParser.SPOEnsembleLogParser(self.path + "/ensembleLog.txt")
-            finished = logParser.parseEnsembleLog()
+            finished = logParser.parseEnsembleLog(self.ensembleID)
             if finished:
                 return SPOStatus.READY
             else:
