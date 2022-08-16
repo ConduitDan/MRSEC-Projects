@@ -93,7 +93,7 @@ class FileSpecFactory:
         partitionField = HeaderFieldSpec("Partition:")
         configSpec.addFieldSpec(partitionField)
         
-        extraScriptCommandsField = HeaderFieldSpec("Extra Script Commands:",multiLine = True)
+        extraScriptCommandsField = HeaderFieldSpec("Extra Commands:",multiLine = True)
         configSpec.addFieldSpec(extraScriptCommandsField)
 
         methodField = HeaderFieldSpec("Method:")
