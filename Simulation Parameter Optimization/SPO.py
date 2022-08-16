@@ -369,8 +369,8 @@ class SPOSimulationRunner:
             #use a job array to submit the ensemble, 
 
             #file.write("#SBATCH --chdir " +self.path+"/$SLURM_ARRAY_TASK_ID\n")
-            file.write("#SBATCH --array=0-"+str(self.ensembleSize-1)+"%"+str(self.maxJobs)+"\n")
-            for line in self.extraCommands:
+            file.write("#SBATCH --array=0-"+str(self.configuration["Runs On:"][1]-1)+"%"+str(self.maxJobs)+"\n")
+            for line in self.configuration["Extra Commands:"]
                 file.write(line+'\n')
             file.write("cd " + self.path+"/$SLURM_ARRAY_TASK_ID\n")
             file.write(self.createCommand())
