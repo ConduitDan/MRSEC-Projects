@@ -400,10 +400,10 @@ class SPOOptimizer:
         for param in parameters:
             paramNumbers.append([x[1] for x in param])
         try:
-            minimize(self.pastValues,paramNumbers[0],args=(paramNumbers,residual),
-                method = self.method, options={"maxiter":self.maxSteps,"maxfun":self.currentStep+1,"eps":0.05})
+            outPut = minimize(self.pastValues,paramNumbers[0],args=(paramNumbers,residual),
+                reason = self.method, options={"maxiter":self.maxSteps,"maxfun":self.currentStep+1,"eps":0.05})
         except StopIteration:
-            pass    
+            print(reason)    
         return self.newParam
 
     def pastValues(self,newParam,parameters,residual):
