@@ -5,11 +5,7 @@ import fileinput
 import fcntl
 import time
 import os
-# TODO:
-# [x] Config File Parser
-# [ ] Ensemble Writer
-# [x] Log File Parser
-
+import random
 
 
 #Parser should be simple, put complexity in the file spec
@@ -17,9 +13,11 @@ class SPOEnsembleLogParser:
     def __init__(self,fileName):
 
         #check if lock file exists
-        self.lockfile = fileName+"lock"
-
         counter = 0
+        #we don't want things finishing at nearly the same time, so we'll offset
+        # them by a bit, here we'll do a sleep by a random number??? i guess??
+        time.sleep(random.random())
+        self.lockfile = fileName+"lock"
         while os.path.exists(self.lockfile):
             counter+=1
             time.sleep(3) 
