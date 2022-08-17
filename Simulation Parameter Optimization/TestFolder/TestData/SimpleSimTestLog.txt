@@ -1,0 +1,5 @@
+# SimpleSimTest
+########################
+# Command: python3 ~/github/MRSEC\ Projects/Simulation\ Parameter\ Optimization/TestFolder/testSim.py x y z
+# Target Data: testTargetData.txt
+Step 0    {x:1.0,y:2.2,z:-2.0}    Residue:

@@ -1,0 +1,32 @@
+#Config File For Testing
+
+Name:
+TestFolder/TestData
+
+Simulation:
+python3 ~/github/MRSEC\ Projects/Simulation\ Parameter\ Optimization/TestFolder/testSim.py x y z
+
+Parameters:
+x: 1
+y: 2.2
+z: -2
+
+Data:
+testSimData.txt testTargetData.txt
+
+Runs On:
+#Desktop
+HPCC 2
+
+Account:
+hagan-lab
+
+#Extra Script Commands:
+#module load anaconda/5.2_py3
+
+Method:
+L-BFGS-B
+
+#
+#
+

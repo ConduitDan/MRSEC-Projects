@@ -143,7 +143,10 @@ class SimulationParameterOptimizer:
         logFile.write("Residue:"+str(residue)+"\n")
 
     def writeLogFileHeader(self):
-        os.mkdir(self.configuration["Name:"])
+        try:
+            os.mkdir(self.configuration["Name:"])
+        except:
+            pass
         logFile = open(self.logFileName,'a')
         logFile.write("# "+self.configuration["Name:"]+"\n")
         logFile.write("########################\n")

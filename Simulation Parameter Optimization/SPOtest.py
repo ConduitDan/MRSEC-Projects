@@ -68,6 +68,25 @@ class FileSpec(unittest.TestCase):
         myParser = SPOParser.SPOEnsembleLogParser("TestFolder/ParserTest/ensembleLogReady.txt")
         self.assertFalse(myParser.parseEnsembleLog(1))
         self.assertTrue(myParser.parseEnsembleLog(0))
+
+
+    def test_read_ensemble_log_Lvl2(self):
+        # Write a fresh Log
+        f = open("TestFolder/TestData/parameter_step_0/ensembleLog.txt",'w')
+        f.write("Run 0 of 2 Running \n")
+        f.write("Run 1 of 2 Running ")
+        f.close()
+        mySPO = SPO.SimulationParameterOptimizer("TestFolder/TestConfigFileHPCC.txt",0)
+        mySPO.logFileName = "TestFolder/TestData/SimpleSimTestLog.txt"
+        mySPO.run() #all ths should do is replace that first line with "Run 0 of 2 Finished"
+
+        f = open("TestFolder/TestData/parameter_step_0/ensembleLog.txt",'r')
+        self.assertEqual(f.readline(),"Run 0 of 2 Finished \n")
+        f.close()
+        
+
+
+
         
 
 class data_read_tests(unittest.TestCase):
@@ -192,8 +211,8 @@ class simulation_runner_tests(unittest.TestCase):
 
 class systemTest(unittest.TestCase):
     def test_simpleSimulation(self):
+        shutil.rmtree("TestFolder/SimpleSimTest/")
         os.system("(cd TestFolder; python3 ../SPO.py TestConfigFile.txt)")
-        # shutil.rmtree(self.simpleSPO.configuration["Name:"])
         
 
 
