@@ -2,6 +2,9 @@
 import re
 import SPO
 import fileinput
+import fcntl
+import time
+import os
 # TODO:
 # [x] Config File Parser
 # [ ] Ensemble Writer
@@ -12,10 +15,24 @@ import fileinput
 #Parser should be simple, put complexity in the file spec
 class SPOEnsembleLogParser:
     def __init__(self,fileName):
+
+        #check if lock file exists
+        self.lockfile = fileName+"lock"
+
+        counter = 0
+        while os.path.exists(self.lockfile):
+            counter+=1
+            time.sleep(3) 
+            if counter >100:
+                raise Exception("Couldn't obtain lock on %s"%fileName)
+        f = open(self.lockfile,'w')
+        f.write("locked")
+        f.close()
         self.file = fileinput.input(fileName,inplace=True)
 
     def __del__(self):
         self.file.close()
+        os.remove(self.lockfile)
     
     def parseEnsembleLog(self,ensembleID):
         finished = False
