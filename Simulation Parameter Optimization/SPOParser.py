@@ -19,9 +19,10 @@ class SPOEnsembleLogParser:
     
     def parseEnsembleLog(self,ensembleID):
         finished = False
-        ensembleSize = -1
+        ensembleSize = 0
         finishedCounter = 0
         for line in self.file:
+            ensembleSize+=1
             #look for lines that end in "Running " 
             runningJob = re.match("Run (\d+) of \d+ Running",line)
             if runningJob:
@@ -30,11 +31,9 @@ class SPOEnsembleLogParser:
                     # we are the responsible of that job,
                     # update that is is finished
                     line = line.replace("Running","Finished")
-                    finishedCounter +=1
             finishedJob = re.match("Run \d+ of (\d+) Finished",line)
             if finishedJob:
                 finishedCounter +=1
-                ensembleSize = int(finishedJob.group(1))
             if not (finishedJob or runningJob):
                 raise Exception("Could not read line %s in ensemble file"%line)
 

@@ -28,20 +28,20 @@ class FileSpec(unittest.TestCase):
         configFile = SPOParser.FileSpecFactory().configFileSpec()
         vals = configFile.readFile("TestFolder/TestConfigFile.txt")
         self.assertEqual(vals["Name:"],"SimpleSimTest")
-        self.assertEqual(vals["Simulation:"],"python3 testSim.py x y z")
+        self.assertEqual(vals["Simulation:"],"python3 ~/github/MRSEC\ Projects/Simulation\ Parameter\ Optimization/TestFolder/testSim.py x y z")
         self.assertEqual(vals["Parameters:"],[["x",1],["y",2.2],["z",-2]])
         self.assertEqual(vals["Data:"],[("testSimData.txt", "testTargetData.txt")])
         self.assertEqual(vals["Runs On:"],[SPO.SPORunsOn.Desktop,1])
         self.assertEqual(vals["Method:"],"L-BFGS-B")
 
-    def test_parseConfigFileMatlab(self):
-        # Look I know this test way more than just the parser
-        # The point is this will be refactored so all this logic is just in the 
-        # parser and the File and Field Specs
-        mySPO = SPO.SimulationParameterOptimizer("TestFolder/TestConfigFileMatlab.txt",None)
-        mySPO.step = 0
-        runner = SPO.SPOSimulationRunner(mySPO)
-        self.assertEqual(runner.caller,"matlab -nojvm -batch ")
+    # def test_parseConfigFileMatlab(self):
+    #     # Look I know this test way more than just the parser
+    #     # The point is this will be refactored so all this logic is just in the 
+    #     # parser and the File and Field Specs
+    #     mySPO = SPO.SimulationParameterOptimizer("TestFolder/TestConfigFileMatlab.txt",None)
+    #     mySPO.step = 0
+    #     runner = SPO.SPOSimulationRunner(mySPO)
+    #     self.assertEqual(runner.caller,"matlab -nojvm -batch ")
 
 
     def test_read_log(self):
@@ -107,6 +107,7 @@ class simulation_runner_tests(unittest.TestCase):
                     "Name:":"Simulation_runner_tests",
                     "Runs On:":[SPO.SPORunsOn.Desktop,1],
                     "Partition:":"guest",
+                    "Account:":"guest",
                     "Extra Commands:":"",
                     "Parameters:":[["x1",1],["x2",2]]}
 
@@ -134,7 +135,7 @@ class simulation_runner_tests(unittest.TestCase):
         self.assertEqual(script.readline(),"cd %s/parameter_step_0\n"%self.simpleSPO.configuration["Name:"])
         file = os.getcwd() + "/testcommand"
 
-        self.assertEqual(script.readline(),"matlab " + file.replace(' ','\ ') + "  1 2  \n")
+        self.assertEqual(script.readline(),"matlab testcommand 1 2  \n")
         self.assertEqual(script.readline(),"cd ../.. \n")
         self.assertEqual(script.readline(),"python3 " + os.getcwd().replace(' ','\ ')+ "/SPO.py "+self.simpleSPO.configFile +'\n')
         script.close()
@@ -152,13 +153,14 @@ class simulation_runner_tests(unittest.TestCase):
         script = open("Simulation_runner_tests/parameter_step_0/scriptRunner.sh")
 
         self.assertEqual(script.readline(),"#!/usr/bin/bash\n")
-        self.assertEqual(script.readline(),"#SBatch --job-name=Simulation_runner_tests\n")
-        self.assertEqual(script.readline(),"#SBatch --partition=guest\n")
+        self.assertEqual(script.readline(),"#SBATCH --job-name=Simulation_runner_tests\n")
+        self.assertEqual(script.readline(),"#SBATCH --account=guest\n")
+        self.assertEqual(script.readline(),"#SBATCH --partition=guest\n")
 
         self.assertEqual(script.readline(),"cd %s/parameter_step_0\n"%self.simpleSPO.configuration["Name:"])
-        file = os.getcwd() + "/testcommand"
+        #file = os.getcwd() + "/testcommand"
 
-        self.assertEqual(script.readline(),"matlab " + file.replace(' ','\ ') + "  1 2  \n")
+        self.assertEqual(script.readline(),"matlab testcommand 1 2  \n")
         self.assertEqual(script.readline(),"cd ../.. \n")
         self.assertEqual(script.readline(),"python3 " + os.getcwd().replace(' ','\ ')+ "/SPO.py "+self.simpleSPO.configFile+'\n')
         script.close()
@@ -174,16 +176,16 @@ class simulation_runner_tests(unittest.TestCase):
         script = open("Simulation_runner_tests/parameter_step_0/scriptRunner.sh")
 
         self.assertEqual(script.readline(),"#!/usr/bin/bash\n")
-        self.assertEqual(script.readline(),"#SBatch --job-name=Simulation_runner_tests\n")
-        self.assertEqual(script.readline(),"#SBatch --partition=guest\n")
-        self.assertEqual(script.readline(),"#SBatch --chdir Simulation_runner_tests/parameter_step_0/$SLURM_ARRAY_TASK_ID\n")
-        self.assertEqual(script.readline(),"#SBatch --array=0-1%10\n")
+        self.assertEqual(script.readline(),"#SBATCH --job-name=Simulation_runner_tests\n")
+        self.assertEqual(script.readline(),"#SBATCH --account=guest\n")
+        self.assertEqual(script.readline(),"#SBATCH --partition=guest\n")
+        #self.assertEqual(script.readline(),"#SBATCH --chdir Simulation_runner_tests/parameter_step_0/$SLURM_ARRAY_TASK_ID\n")
+        self.assertEqual(script.readline(),"#SBATCH --array=0-1%10\n")
         
-        file = os.getcwd() + "/testcommand"
-
-        self.assertEqual(script.readline(),"matlab " + file.replace(' ','\ ') + "  1 2  \n")
-        self.assertEqual(script.readline(),"cd ../..\n")
-        self.assertEqual(script.readline(),"python3 " + os.getcwd().replace(' ','\ ')+ "/SPO.py "+self.simpleSPO.configFile + " $SLURM_ARRAY_TASK_ID\n")
+        self.assertEqual(script.readline(),"cd Simulation_runner_tests/parameter_step_0/$SLURM_ARRAY_TASK_ID\n")
+        self.assertEqual(script.readline(),"matlab testcommand 1 2  \n")
+        self.assertEqual(script.readline(),"cd ../../..\n")
+        self.assertEqual(script.readline(),"python3 " + os.getcwd().replace(' ','\ ')+ "/SPO.py "+self.simpleSPO.configFile+' $SLURM_ARRAY_TASK_ID\n')
         script.close()
 
 

@@ -4,7 +4,7 @@ Name:
 SimpleSimTest
 
 Simulation:
-python3 testSim.py x y z
+python3 ~/github/MRSEC\ Projects/Simulation\ Parameter\ Optimization/TestFolder/testSim.py x y z
 
 Parameters:
 x: 1

@@ -265,7 +265,7 @@ class SPOSimulationRunner:
     def __init__ (self,SPO):
         self.configuration = SPO.configuration
         # self.command = SPO.simulationCommand
-        (self.caller,self.sim,self.cmdLineArgs) = self.splitCommand()
+        # (self.caller,self.sim,self.cmdLineArgs) = self.splitCommand()
         # self.parameters = SPO.parameters
         # self.runsOn = SPO.runsOn
         # self.name = SPO.name
@@ -278,25 +278,25 @@ class SPOSimulationRunner:
             # self.extraCommands = SPO.extraCommands
         self.maxJobs = SPO.maxJobs
         self.scriptName = "scriptRunner.sh"
-    def splitCommand(self):
-        #first try and match ./
-        bashCommand = re.match("./(.*)",self.configuration["Simulation:"])
-        caller = ""
-        command = ""
-        if bashCommand:
-            caller = "./"
-            command = bashCommand.group(1)
-        else:
-            callerMatch = re.match("(.*?\s+(?:-\S+\s+)*)(.*)",self.configuration["Simulation:"])
-            if callerMatch:
-                caller = callerMatch.group(1)
-                command = callerMatch.group(2)
-            else:
-                raise Exception("command not in a recognizable format")
-        sim = command.split(' ')[0]
-        cmdLineArgs = command.replace(sim+ ' ','',1)
-        #sim = os.path.abspath(sim).replace(' ','\ ')
-        return (caller,sim,cmdLineArgs)
+    # def splitCommand(self):
+    #     #first try and match ./
+    #     bashCommand = re.match("./(.*)",self.configuration["Simulation:"])
+    #     caller = ""
+    #     command = ""
+    #     if bashCommand:
+    #         caller = "./"
+    #         command = bashCommand.group(1)
+    #     else:
+    #         callerMatch = re.match("(.*?\s+(?:-\S+\s+)*)(.*)",self.configuration["Simulation:"])
+    #         if callerMatch:
+    #             caller = callerMatch.group(1)
+    #             command = callerMatch.group(2)
+    #         else:
+    #             raise Exception("command not in a recognizable format")
+    #     sim = command.split(' ')[0]
+    #     cmdLineArgs = command.replace(sim+ ' ','',1)
+    #     #sim = os.path.abspath(sim).replace(' ','\ ')
+    #     return (caller,sim,cmdLineArgs)
 
 
     def createFolders(self):
@@ -327,11 +327,15 @@ class SPOSimulationRunner:
             os.mkdir(self.path+'/' +str(i))
     
     def createCommand(self):
-        commandWithParams = self.cmdLineArgs
-        commandWithParams = " "+commandWithParams+" "
+        
+        delimiter = "([^a-zA-Z0-9])"
+        commandWithParams = self.configuration["Simulation:"]+' '
+
+        # commandWithParams = self.cmdLineArgs
+        # commandWithParams = " "+commandWithParams+" "
         for param in self.configuration["Parameters:"]:
-            commandWithParams = re.sub(" "+param[0]+" "," "+str(param[1])+" ",commandWithParams)
-        return self.caller + self.sim + ' ' + commandWithParams+"\n"
+            commandWithParams = re.sub(delimiter+param[0]+delimiter,'\g<1>'+str(param[1])+'\g<2>',commandWithParams)
+        return commandWithParams +"\n"
     
     def createScript(self):
         file = open(self.path+"/"+self.scriptName,"w")
@@ -409,7 +413,7 @@ class SPOOptimizer:
             if not hasattr(self,'newParam'):
                 print(outPut)
         except StopIteration:
-            print(outPut)    
+            pass
         return self.newParam
 
     def pastValues(self,newParam,parameters,residual):
