@@ -274,33 +274,8 @@ class SPOSimulationRunner:
         # self.name = SPO.name
         self.step = SPO.step
         self.configFile = SPO.configFile
-        # self.configuration["Runs On:"][1] = 1
-        # if self.runsOn[0] == SPORunsOn.HPCC:
-            # self.partition = SPO.partition
-            # self.configuration["Runs On:"][1] = self.runsOn[1]
-            # self.extraCommands = SPO.extraCommands
         self.maxJobs = SPO.maxJobs
         self.scriptName = "scriptRunner.sh"
-    # def splitCommand(self):
-    #     #first try and match ./
-    #     bashCommand = re.match("./(.*)",self.configuration["Simulation:"])
-    #     caller = ""
-    #     command = ""
-    #     if bashCommand:
-    #         caller = "./"
-    #         command = bashCommand.group(1)
-    #     else:
-    #         callerMatch = re.match("(.*?\s+(?:-\S+\s+)*)(.*)",self.configuration["Simulation:"])
-    #         if callerMatch:
-    #             caller = callerMatch.group(1)
-    #             command = callerMatch.group(2)
-    #         else:
-    #             raise Exception("command not in a recognizable format")
-    #     sim = command.split(' ')[0]
-    #     cmdLineArgs = command.replace(sim+ ' ','',1)
-    #     #sim = os.path.abspath(sim).replace(' ','\ ')
-    #     return (caller,sim,cmdLineArgs)
-
 
     def createFolders(self):
         self.path = self.configuration["Name:"]+"/parameter_step_"+str(self.step)
@@ -398,7 +373,7 @@ class SPOSimulationRunner:
             runString = "sbatch "+self.path+"/"+ self.scriptName + " &"
         else:
             runString = self.path+"/"+ self.scriptName + " &"
-
+        print(runString)
         subprocess.run(runString,shell=True)
 
 class SPOOptimizer:
