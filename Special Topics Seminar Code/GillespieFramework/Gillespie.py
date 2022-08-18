@@ -93,8 +93,9 @@ class Gillespie:
         return RxNum
 
 if __name__=="__main__":
-
+    # A + B -> C
     rx0 = Reaction([StructuralFormula(0,1),StructuralFormula(1,1)],[StructuralFormula(2,1)],1)
+    # C -> A + B
     rx1 = Reaction([StructuralFormula(2,1)],[StructuralFormula(0,1),StructuralFormula(1,1)],1)
 
     myGillespie = Gillespie([50,50,50],[rx0,rx1])
