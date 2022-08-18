@@ -370,7 +370,7 @@ class SPOSimulationRunner:
     def runScript(self):
         runString = ""
         if self.configuration["Runs On:"][0].value == SPORunsOn.HPCC.value:
-            runString = "sbatch "+self.path+"/"+ self.scriptName + " &"
+            runString = "sbatch "+self.path+"/"+ self.scriptName
         else:
             runString = self.path+"/"+ self.scriptName + " &"
         print(runString)
