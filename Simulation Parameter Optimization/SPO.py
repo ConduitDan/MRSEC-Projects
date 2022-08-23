@@ -75,6 +75,25 @@ class SimulationParameterOptimizer:
         self.tol = 10
         self.maxSteps = 100
 
+    def run_with_overhead(self):
+        # this runs the optimizer with the overhead of a process running in the 
+        # background. This is a little bit easier as we don't have to worry 
+        # about where where we are in the process
+
+
+        # TODO
+        # [ ] Change Objective function to use the runner 
+
+        print("Starting Optimization")
+        #create the log file
+        self.writeLogFileHeader()
+        self.writeStartRunLog()
+        myRunner = SPOSimulationRunnerWithOverhead(self)
+        myOptimizer = SPOOptimizerWithOverhead(self,myRunner)
+        myOptimzer.run()
+
+        
+
     def run(self):
         # the main run function
         
@@ -92,8 +111,10 @@ class SimulationParameterOptimizer:
             self.writeLogFileHeader()
             self.writeStartRunLog()
 
+
+            myRunner = SPOSimulationRunner(self)
             #start a run
-            self.setupAndStartRun()
+            self.setupAndStartRun(myRunner)
 
             #and exit
             return
@@ -125,9 +146,11 @@ class SimulationParameterOptimizer:
                 self.updateParameters(self.parameterHistory,self.residuals)
                 print("Running step %d"%self.step)
                 self.writeStartRunLog()
+                # make the runner
+                myRunner = SPOSimulationRunner(self)
 
                 # and start the next run
-                self.setupAndStartRun()
+                self.setupAndStartRun(myRunner)
     def writeStartRunLog(self):
         logFile = open(self.logFileName,'a')
         logFile.write("Step "+str(self.step)+"    {")
@@ -159,9 +182,8 @@ class SimulationParameterOptimizer:
 
         self.step = 0
 
-    def setupAndStartRun(self):
+    def setupAndStartRun(self,myRunner):
         #makes the folder name/step
-        myRunner = SPOSimulationRunner(self)
         myRunner.createFolders()
         myRunner.createLogs()
         myRunner.createScript()
@@ -376,6 +398,10 @@ class SPOSimulationRunner:
         print(runString)
         subprocess.run(runString,shell=True)
 
+
+class SPOSimulationRunnerWithOverHead(SPOSimulationRunner):
+    pass
+
 class SPOOptimizer:
     def __init__(self,method,maxSteps,currentStep):
         self.method = method
@@ -388,7 +414,7 @@ class SPOOptimizer:
         for param in parameters:
             paramNumbers.append([x[1] for x in param])
         try:
-            outPut = minimize(self.pastValues,paramNumbers[0],args=(paramNumbers,residual),
+            outPut = minimize(self.objectiveFunction,paramNumbers[0],args=(paramNumbers,residual),
                 method = self.method, options={"maxiter":self.maxSteps,"maxfun":self.currentStep+1,"eps":0.05})
             if not hasattr(self,'newParam'):
                 print(outPut)
@@ -396,7 +422,7 @@ class SPOOptimizer:
             pass
         return self.newParam
 
-    def pastValues(self,newParam,parameters,residual):
+    def objectiveFunction(self,newParam,parameters,residual):
         # if this is a new parameter
         if self.step>=len(parameters):
             # save the values
@@ -417,6 +443,43 @@ class SPOOptimizer:
         retVal = residual[self.step]
         self.step+=1
         return retVal
+
+#This has a whole differnt interface apperntly so we don't inhareit... should think
+# carfully about the structure of this
+class SPOOptimizerWithOverhead():
+    def __init__(self,SPO,runner):
+        self.SPO = SPO
+        self.runner = runner
+    def run(self):
+        #run the optimizer
+        myMethod = self.SPO.configuration["Method:"]
+        myEps = self.SPO.configuration["EPS:"]
+        myTolerance = self.SPO.configuration["Tolerance:"]
+        myMaxSteps = self.SPO.configuration["Max Steps:"]
+        outPut = minimize(self.objectiveFunction,paramNumbers[0],args=(paramNumbers,residual),
+            method = myMethod, options={"maxiter":myMaxSteps,"eps":myEps,"tol":myTolerance})
+
+
+    def objectiveFunction(self,newParam):
+        pass
+        # when we run a step of the optimizer we need do 
+
+        # write the new parameters to the log
+
+
+        # make the folder
+
+        # make the script
+
+        # run the script
+
+        # calculate the residual
+
+        # write the residual to the log
+
+
+
+
 
 if __name__ == "__main__":
     configFile = sys.argv[1]
