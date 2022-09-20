@@ -35,6 +35,8 @@ import fileinput
 import pandas as pd
 import numpy as np
 import SPOParser
+import time
+
 
 
 from scipy.optimize import minimize
@@ -400,7 +402,43 @@ class SPOSimulationRunner:
 
 
 class SPOSimulationRunnerWithOverHead(SPOSimulationRunner):
-    pass
+    def runScript(self):
+        runString = ""
+        if self.configuration["Runs On:"][0].value == SPORunsOn.HPCC.value:
+            runString = "sbatch "+self.path+"/"+ self.scriptName
+        else:
+            runString = self.path+"/"+ self.scriptName
+        print(runString)
+        output=subprocess.run(runString,shell=True,capture_output=True)
+        # if we're running on the hpc we need to wait until all jobs are done
+        if self.configuration["Runs On:"][0].value == SPORunsOn.HPCC.value:
+            # first parse the the job ID
+            jobMatch =  re.match("Submitted batch job (%d+)",output)
+            if jobMatch:
+                jobID = jobMatch.group(1)
+            else:
+                raise Exception("Failed to submit job")
+            # TODO: Run one of the jobs on this node
+            
+            # now enter a loop to check every 5 minutes if the job is done
+            
+            #check the status of the job
+            counter = 0
+            twoDays = 48*60*60
+            fiveMinutes = 5*60
+            
+            while not finished:
+                finished = self.checkForFinishedJob(jobID)
+                counter += fiveMinutes
+                if counter>twoDays:
+                    raise Exception("Simulation took longer than 2 days")
+                time.sleep(fiveMinutes)
+        # now all simulations have finished. we can continue
+    
+
+
+
+
 
 class SPOOptimizer:
     def __init__(self,method,maxSteps,currentStep):
@@ -461,17 +499,19 @@ class SPOOptimizerWithOverhead():
 
 
     def objectiveFunction(self,newParam):
-        pass
         # when we run a step of the optimizer we need do 
 
-        # write the new parameters to the log
-
-
         # make the folder
+        self.runner.createFolders()
+
+        # write the new parameters to the log
+        self.runner.createLogs()
 
         # make the script
+        self.runner.createScript()
 
         # run the script
+        runScript
 
         # calculate the residual
 

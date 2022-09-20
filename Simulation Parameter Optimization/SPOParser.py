@@ -16,7 +16,7 @@ class SPOEnsembleLogParser:
         counter = 0
         #we don't want things finishing at nearly the same time, so we'll offset
         # them by a bit, here we'll do a sleep by a random number??? i guess??
-        time.sleep(random.random())
+        time.sleep(random.random()*10)
         self.lockfile = fileName+"lock"
         while os.path.exists(self.lockfile):
             counter+=1
