@@ -1,0 +1,37 @@
+#Config File For Testing
+
+Name:
+SimpleSimTestHyperopt
+
+Simulation:
+python3 ~/github/MRSEC\ Projects/Simulation\ Parameter\ Optimization/TestFolder/testSim2.py x y z
+
+Parameters:
+x: 1
+y: 2.2
+z: -2
+
+Parameter Space:
+x: {-5:5}
+y: {-5:5}
+z: {-5:5}
+
+Data:
+testSimData.txt testTargetData2.txt
+
+Runs On:
+Desktop
+#HPCC 100
+
+#Partition:
+#hagan-lab
+
+#Extra Script Commands:
+#module load anaconda/5.2_py3
+
+Method:
+Hyperopt
+
+#
+#
+

@@ -213,8 +213,14 @@ class systemTest(unittest.TestCase):
     def test_simpleSimulation(self):
         shutil.rmtree("TestFolder/SimpleSimTest/")
         os.system("(cd TestFolder; python3 ../SPO.py TestConfigFile.txt)")
+    def test_hyperopt(self):
+        shutil.rmtree("TestFolder/SimpleSimTestHyperopt/")
+        os.system("(cd TestFolder; python3 ../SPO.py TestConfigFile2.txt)")
         
 
 
 if __name__ == '__main__':
-    unittest.main()
+    mySystemTest=systemTest()
+    # mySystemTest.test_simpleSimulation()
+    mySystemTest.test_hyperopt()
+    # unittest.main()

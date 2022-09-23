@@ -139,6 +139,14 @@ class FileSpecFactory:
             pattern = "(.*):\s*"+self.floatMatch,multiLine = True,postProcessing=paramPostProcess)
         configSpec.addFieldSpec(paramField)
 
+        def paramSpacePostProcess(self):
+            print(self.value)
+            for i in range(len(self.value)):
+                self.value[i] = [self.value[i][0],float(self.value[i][1]),float(self.value[i][2])]
+        paramSpaceField = HeaderFieldSpec("Parameter Space:",\
+            pattern = "(.*):\s*{"+self.floatMatch+":"+self.floatMatch+"}",multiLine = True,postProcessing=paramSpacePostProcess)
+        configSpec.addFieldSpec(paramSpaceField)
+
         # now the more complicated fields
         # runs on need to make sure we have Either Desktop or HPCC and might 
         # have a number after it. So we define some post processing to
