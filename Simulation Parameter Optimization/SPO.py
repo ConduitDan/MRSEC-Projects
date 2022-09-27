@@ -71,30 +71,32 @@ class SimulationParameterOptimizer:
         self.logFileName = self.configuration["Name:"] +"/" + self.configuration["Name:"] + "Log.txt"
         self.optimizerLogFile = self.configuration["Name:"] + "OptimizerLog.txt"
 
+        self.configuration["EPS:"] = 1e-2
+        self.configuration["Tolerance:"] = 1e-6
+        self.configuration["Max Steps:"] =1000
+
+
         #now add things like the iteration number to the name 
         self.ensembleNo = ensembleNo
+        self.step = 0
+        self.updatePath()
 
 
         self.maxJobs = 100
-        self.tol = 10
-        self.maxSteps = 100
 
     def run_with_overhead(self):
         # this runs the optimizer with the overhead of a process running in the 
         # background. This is a little bit easier as we don't have to worry 
         # about where where we are in the process
 
-
-        # TODO
-        # [ ] Change Objective function to use the runner 
-
         print("Starting Optimization")
         #create the log file
         self.writeLogFileHeader()
         self.writeStartRunLog()
         myRunner = SPOSimulationRunnerWithOverhead(self)
-        myOptimizer = SPOOptimizerWithOverhead(self,myRunner)
-        myOptimzer.run()
+        myOptimzer = SPOOptimizerWithOverhead(self,myRunner)
+        output = myOptimzer.run()
+        self.finishUp(output)
 
         
 
@@ -114,7 +116,7 @@ class SimulationParameterOptimizer:
             #create the log file
             self.writeLogFileHeader()
             self.updateParameters([])
-            self.writeStartRunLog()
+            # self.writeStartRunLog()
 
 
             myRunner = SPOSimulationRunner(self)
@@ -159,7 +161,8 @@ class SimulationParameterOptimizer:
     def writeStartRunLog(self):
         logFile = open(self.logFileName,'a')
         logFile.write("Step "+str(self.step)+"    {")
-        latestParam  =self.parameters.getParamsWithLabels()[-1]
+        # latestParam  =self.parameters.getParamsWithLabels()[-1]
+        latestParam  =self.parameters.initalParams
         for param in latestParam:
             logFile.write(param[0]+":"+str(param[1]))
             if param != latestParam[-1]:
@@ -170,6 +173,7 @@ class SimulationParameterOptimizer:
     def writeResidueLog(self,residue):
         logFile = open(self.logFileName,'a')
         logFile.write("Residue:"+str(residue)+"\n")
+        logFile.close()
 
     def writeLogFileHeader(self):
         try:
@@ -185,8 +189,6 @@ class SimulationParameterOptimizer:
             logFile.write(spec[1])
         logFile.write("\n")
         logFile.close()
-
-        self.step = 0
 
     def setupAndStartRun(self,myRunner):
         #makes the folder name/step
@@ -243,10 +245,13 @@ class SimulationParameterOptimizer:
         newParamList = myOptimizer.get_next_parameters(self.parameters,residuals)
         self.parameters.addNewParam(newParamList)
         
-    def finishUp(self):
+    def finishUp(self,output = None):
         print("Finishing up")
+        if output is not None:
+            print(output)
 
-    
+    def updatePath(self):
+        self.path = self.configuration["Name:"]+"/parameter_step_"+str(self.step)
     # Check the log file to determine status of the runs.
     def checkStatus(self):
         # if we're not using an ensemble this we are starting if there is no log
@@ -266,12 +271,11 @@ class SimulationParameterOptimizer:
             self.step = linesWithOutResidue[1]
             self.parameters.addParamHistory(params)
             self.residuals = residues
-            self.path = self.configuration["Name:"]+"/parameter_step_"+str(self.step)
-
+            self.updatePath()
 
         else:
             self.step = 0
-            self.path = self.configuration["Name:"]+"/parameter_step_"+str(self.step)
+            self.updatePath()
             return SPOStatus.STARTING
 
         if self.ensembleNo is None:
@@ -385,6 +389,8 @@ class SPOSimulationRunner:
     def writeDesktopScript(self,file):
         file.write("cd " + self.path+"\n")
         file.write(self.createCommand())
+        self.writeRerun(file)
+    def writeRerun(self,file):
         file.write("cd ../.. \n")
         file.write("python3 "+str(__file__).replace(" ",r'\ ') + " " + self.configFile+"\n")
         
@@ -413,6 +419,10 @@ class SPOSimulationRunner:
                 file.write(line+'\n')
             file.write("cd " + self.path+"/$SLURM_ARRAY_TASK_ID\n")
             file.write(self.createCommand())
+            self.writeHPCRerun(file)
+
+
+    def writeHPCRerun(self,file):
             file.write("cd ../../..\n")
             # after the simulation finished call this script again with the 
             # ensemble ID
@@ -424,18 +434,17 @@ class SPOSimulationRunner:
             runString = "sbatch "+self.path+"/"+ self.scriptName
         else:
             runString = self.path+"/"+ self.scriptName + " &"
-        print(runString)
         subprocess.run(runString,shell=True)
 
 
-class SPOSimulationRunnerWithOverHead(SPOSimulationRunner):
+class SPOSimulationRunnerWithOverhead(SPOSimulationRunner):
+
     def runScript(self):
         runString = ""
         if self.configuration["Runs On:"][0].value == SPORunsOn.HPCC.value:
             runString = "sbatch "+self.path+"/"+ self.scriptName
         else:
             runString = self.path+"/"+ self.scriptName
-        print(runString)
         output=subprocess.run(runString,shell=True,capture_output=True)
         # if we're running on the hpc we need to wait until all jobs are done
         if self.configuration["Runs On:"][0].value == SPORunsOn.HPCC.value:
@@ -461,7 +470,12 @@ class SPOSimulationRunnerWithOverHead(SPOSimulationRunner):
                     raise Exception("Simulation took longer than 2 days")
                 time.sleep(fiveMinutes)
         # now all simulations have finished. we can continue
-    
+
+    def writeRerun(self,file):
+        pass
+    def writeHPCRerun(self,file):
+        pass
+
 
 
 
@@ -482,24 +496,22 @@ class SPOOptimizer:
         try:
             if self.method == "Hyperopt":
                 def objectivefn(newParam):
-                     self.pastValues(newParam,paramHistory,residual)
+                     self.objectiveFunction(newParam,paramHistory,residual)
 
                 print("trying Hyperopt")
                 self.outPut = fmin(objectivefn, self.space)
             else:
 
-                self.outPut = minimize(self.pastValues,parameters.getInitalConditions(),args=(paramHistory,residual),
+                self.outPut = minimize(self.objectiveFunction,parameters.getInitalConditions(),args=(paramHistory,residual),
                     method = self.method, options={"maxiter":self.maxSteps,"maxfun":self.currentStep+1,"eps":0.05})
                 if not hasattr(self,'newParam'):
-                    self.print(outPut)
+                    self.print(self.outPut)
         except StopIteration:
             pass
         return self.newParam
 
     def objectiveFunction(self,newParam,parameters,residual):
         # if this is a new parameter
-        print("Step: %d\t # of Params: %d\t # of residuals%d"%(self.step,len(parameters),len(residual)))
-        print(residual)
         if self.step>=len(residual):
             # save the values
             self.newParam = newParam
@@ -525,6 +537,11 @@ class SPOOptimizer:
 # carfully about the structure of this
 class SPOOptimizerWithOverhead():
     def __init__(self,SPO,runner):
+        self.method = SPO.configuration["Method:"]
+        if self.method == "Hyperopt":
+            space = SPO.parameters.paramSpace
+            self.space = list(hp.uniform(pspace[0],pspace[1],pspace[2]) for pspace in space)
+
         self.SPO = SPO
         self.runner = runner
     def run(self):
@@ -533,29 +550,41 @@ class SPOOptimizerWithOverhead():
         myEps = self.SPO.configuration["EPS:"]
         myTolerance = self.SPO.configuration["Tolerance:"]
         myMaxSteps = self.SPO.configuration["Max Steps:"]
-        outPut = minimize(self.objectiveFunction,paramNumbers[0],args=(paramNumbers,residual),
-            method = myMethod, options={"maxiter":myMaxSteps,"eps":myEps,"tol":myTolerance})
+        if self.method == "Hyperopt":
+            self.outPut = fmin(self.objectiveFunction, self.space,max_evals=self.SPO.configuration["Max Steps:"])
+        else:
+            self.outPut = minimize(self.objectiveFunction,self.SPO.parameters.getInitalConditions(),
+                method = myMethod, options={"maxiter":myMaxSteps,"eps":myEps})#,"tol":myTolerance})
+        return self.outPut
 
 
     def objectiveFunction(self,newParam):
         # when we run a step of the optimizer we need do 
-
+        self.SPO.parameters.addNewParam(newParam)
         # make the folder
         self.runner.createFolders()
 
         # write the new parameters to the log
+
         self.runner.createLogs()
+
+        self.SPO.writeStartRunLog()
 
         # make the script
         self.runner.createScript()
 
         # run the script
-        runScript
+        self.runner.runScript()
 
         # calculate the residual
+        res = self.SPO.compareData()
 
         # write the residual to the log
-
+        self.SPO.writeResidueLog(res)
+        self.SPO.step+=1
+        self.runner.step+=1
+        self.SPO.updatePath()
+        return res
 
 
 
@@ -567,4 +596,5 @@ if __name__ == "__main__":
         ensembleNo = int(sys.argv[2])
 
     mySPO = SimulationParameterOptimizer(sys.argv[1],ensembleNo)
-    mySPO.run()
+    mySPO.run_with_overhead()
+    # mySPO.run()
