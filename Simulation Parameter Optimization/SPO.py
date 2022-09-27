@@ -424,7 +424,6 @@ class SPOSimulationRunner:
             runString = "sbatch "+self.path+"/"+ self.scriptName
         else:
             runString = self.path+"/"+ self.scriptName + " &"
-        print(runString)
         subprocess.run(runString,shell=True)
 
 
@@ -482,13 +481,13 @@ class SPOOptimizer:
         try:
             if self.method == "Hyperopt":
                 def objectivefn(newParam):
-                     self.pastValues(newParam,paramHistory,residual)
+                     self.objectiveFunction(newParam,paramHistory,residual)
 
                 print("trying Hyperopt")
                 self.outPut = fmin(objectivefn, self.space)
             else:
 
-                self.outPut = minimize(self.pastValues,parameters.getInitalConditions(),args=(paramHistory,residual),
+                self.outPut = minimize(self.objectiveFunction,parameters.getInitalConditions(),args=(paramHistory,residual),
                     method = self.method, options={"maxiter":self.maxSteps,"maxfun":self.currentStep+1,"eps":0.05})
                 if not hasattr(self,'newParam'):
                     self.print(outPut)
@@ -498,8 +497,8 @@ class SPOOptimizer:
 
     def objectiveFunction(self,newParam,parameters,residual):
         # if this is a new parameter
-        print("Step: %d\t # of Params: %d\t # of residuals%d"%(self.step,len(parameters),len(residual)))
-        print(residual)
+        # print("Step: %d\t # of Params: %d\t # of residuals%d"%(self.step,len(parameters),len(residual)))
+        # print(residual)
         if self.step>=len(residual):
             # save the values
             self.newParam = newParam
