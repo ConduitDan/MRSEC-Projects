@@ -37,6 +37,9 @@ import numpy as np
 import SPOParser
 import operator
 from hyperopt import fmin, hp
+import time
+
+
 
 from scipy.optimize import minimize
 class SPOStatus(Enum):
@@ -76,6 +79,25 @@ class SimulationParameterOptimizer:
         self.tol = 10
         self.maxSteps = 100
 
+    def run_with_overhead(self):
+        # this runs the optimizer with the overhead of a process running in the 
+        # background. This is a little bit easier as we don't have to worry 
+        # about where where we are in the process
+
+
+        # TODO
+        # [ ] Change Objective function to use the runner 
+
+        print("Starting Optimization")
+        #create the log file
+        self.writeLogFileHeader()
+        self.writeStartRunLog()
+        myRunner = SPOSimulationRunnerWithOverhead(self)
+        myOptimizer = SPOOptimizerWithOverhead(self,myRunner)
+        myOptimzer.run()
+
+        
+
     def run(self):
         # the main run function
         
@@ -95,8 +117,9 @@ class SimulationParameterOptimizer:
             self.writeStartRunLog()
 
 
+            myRunner = SPOSimulationRunner(self)
             #start a run
-            self.setupAndStartRun()
+            self.setupAndStartRun(myRunner)
 
             #and exit
             return
@@ -128,9 +151,11 @@ class SimulationParameterOptimizer:
                 self.updateParameters(self.residuals)
                 print("Running step %d"%self.step)
                 self.writeStartRunLog()
+                # make the runner
+                myRunner = SPOSimulationRunner(self)
 
                 # and start the next run
-                self.setupAndStartRun()
+                self.setupAndStartRun(myRunner)
     def writeStartRunLog(self):
         logFile = open(self.logFileName,'a')
         logFile.write("Step "+str(self.step)+"    {")
@@ -163,9 +188,8 @@ class SimulationParameterOptimizer:
 
         self.step = 0
 
-    def setupAndStartRun(self):
+    def setupAndStartRun(self,myRunner):
         #makes the folder name/step
-        myRunner = SPOSimulationRunner(self)
         myRunner.createFolders()
         myRunner.createLogs()
         myRunner.createScript()
@@ -403,6 +427,46 @@ class SPOSimulationRunner:
         print(runString)
         subprocess.run(runString,shell=True)
 
+
+class SPOSimulationRunnerWithOverHead(SPOSimulationRunner):
+    def runScript(self):
+        runString = ""
+        if self.configuration["Runs On:"][0].value == SPORunsOn.HPCC.value:
+            runString = "sbatch "+self.path+"/"+ self.scriptName
+        else:
+            runString = self.path+"/"+ self.scriptName
+        print(runString)
+        output=subprocess.run(runString,shell=True,capture_output=True)
+        # if we're running on the hpc we need to wait until all jobs are done
+        if self.configuration["Runs On:"][0].value == SPORunsOn.HPCC.value:
+            # first parse the the job ID
+            jobMatch =  re.match("Submitted batch job (%d+)",output)
+            if jobMatch:
+                jobID = jobMatch.group(1)
+            else:
+                raise Exception("Failed to submit job")
+            # TODO: Run one of the jobs on this node
+            
+            # now enter a loop to check every 5 minutes if the job is done
+            
+            #check the status of the job
+            counter = 0
+            twoDays = 48*60*60
+            fiveMinutes = 5*60
+            
+            while not finished:
+                finished = self.checkForFinishedJob(jobID)
+                counter += fiveMinutes
+                if counter>twoDays:
+                    raise Exception("Simulation took longer than 2 days")
+                time.sleep(fiveMinutes)
+        # now all simulations have finished. we can continue
+    
+
+
+
+
+
 class SPOOptimizer:
     def __init__(self,method,maxSteps,currentStep,space = None):
         self.method = method
@@ -432,7 +496,7 @@ class SPOOptimizer:
             pass
         return self.newParam
 
-    def pastValues(self,newParam,parameters,residual):
+    def objectiveFunction(self,newParam,parameters,residual):
         # if this is a new parameter
         print("Step: %d\t # of Params: %d\t # of residuals%d"%(self.step,len(parameters),len(residual)))
         print(residual)
@@ -456,6 +520,45 @@ class SPOOptimizer:
         retVal = residual[self.step]
         self.step+=1
         return retVal
+
+#This has a whole differnt interface apperntly so we don't inhareit... should think
+# carfully about the structure of this
+class SPOOptimizerWithOverhead():
+    def __init__(self,SPO,runner):
+        self.SPO = SPO
+        self.runner = runner
+    def run(self):
+        #run the optimizer
+        myMethod = self.SPO.configuration["Method:"]
+        myEps = self.SPO.configuration["EPS:"]
+        myTolerance = self.SPO.configuration["Tolerance:"]
+        myMaxSteps = self.SPO.configuration["Max Steps:"]
+        outPut = minimize(self.objectiveFunction,paramNumbers[0],args=(paramNumbers,residual),
+            method = myMethod, options={"maxiter":myMaxSteps,"eps":myEps,"tol":myTolerance})
+
+
+    def objectiveFunction(self,newParam):
+        # when we run a step of the optimizer we need do 
+
+        # make the folder
+        self.runner.createFolders()
+
+        # write the new parameters to the log
+        self.runner.createLogs()
+
+        # make the script
+        self.runner.createScript()
+
+        # run the script
+        runScript
+
+        # calculate the residual
+
+        # write the residual to the log
+
+
+
+
 
 if __name__ == "__main__":
     configFile = sys.argv[1]
