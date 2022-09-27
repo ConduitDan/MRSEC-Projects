@@ -35,6 +35,8 @@ import fileinput
 import pandas as pd
 import numpy as np
 import SPOParser
+import operator
+from hyperopt import fmin, hp
 import time
 
 
@@ -65,7 +67,7 @@ class SimulationParameterOptimizer:
         # self.partition = configValues["Partition:"]
         # self.extraCommands = configValues["Extra Script Commands:"]
         # self.method = configValues["Method:"]
-
+        self.parameters = SPOParameters(self.configuration)
         self.logFileName = self.configuration["Name:"] +"/" + self.configuration["Name:"] + "Log.txt"
         self.optimizerLogFile = self.configuration["Name:"] + "OptimizerLog.txt"
 
@@ -111,6 +113,7 @@ class SimulationParameterOptimizer:
             print("Starting Optimization")
             #create the log file
             self.writeLogFileHeader()
+            self.updateParameters([])
             self.writeStartRunLog()
 
 
@@ -138,14 +141,14 @@ class SimulationParameterOptimizer:
             # if we're below tolerance then finish up
             if residue<self.tol:
                 print("Found solution set %s, residue is %s"\
-                    %(str(self.parameterHistory[-1]),residue))
+                    %(str(self.parameters.getParamsWithLabels()[-1]),residue))
                 self.finishUp()
 
             else:
                 # otherwise update the parameters
                 # first read in the parameters and residuals
                 
-                self.updateParameters(self.parameterHistory,self.residuals)
+                self.updateParameters(self.residuals)
                 print("Running step %d"%self.step)
                 self.writeStartRunLog()
                 # make the runner
@@ -156,9 +159,10 @@ class SimulationParameterOptimizer:
     def writeStartRunLog(self):
         logFile = open(self.logFileName,'a')
         logFile.write("Step "+str(self.step)+"    {")
-        for param in self.configuration["Parameters:"]:
+        latestParam  =self.parameters.getParamsWithLabels()[-1]
+        for param in latestParam:
             logFile.write(param[0]+":"+str(param[1]))
-            if param != self.configuration["Parameters:"][-1]:
+            if param != latestParam[-1]:
                 logFile.write(",")
         logFile.write("}    ")
         logFile.close()
@@ -233,14 +237,12 @@ class SimulationParameterOptimizer:
         return np.linalg.norm(simulationData-targetData)
             
 
-    def updateParameters(self,parameters,residuals):
+    def updateParameters(self,residuals):
         # read the log to get the list of parameters and residuals
-        myOptimizer = SPOOptimizer(self.configuration["Method:"],self.maxSteps,self.step)
-        newParamList = myOptimizer.get_next_parameters(parameters,residuals)
+        myOptimizer = SPOOptimizer(self.configuration["Method:"],self.maxSteps,self.step,space = self.configuration["Parameter Space:"])
+        newParamList = myOptimizer.get_next_parameters(self.parameters,residuals)
+        self.parameters.addNewParam(newParamList)
         
-        for i in range(len(self.configuration["Parameters:"])):
-            self.configuration["Parameters:"][i][1] = newParamList[i]
-
     def finishUp(self):
         print("Finishing up")
 
@@ -262,12 +264,11 @@ class SimulationParameterOptimizer:
 
 
             self.step = linesWithOutResidue[1]
-            self.parameterHistory = params
+            self.parameters.addParamHistory(params)
             self.residuals = residues
             self.path = self.configuration["Name:"]+"/parameter_step_"+str(self.step)
 
 
-        
         else:
             self.step = 0
             self.path = self.configuration["Name:"]+"/parameter_step_"+str(self.step)
@@ -286,6 +287,32 @@ class SimulationParameterOptimizer:
             else:
                 return SPOStatus.WAITING
 
+class SPOParameters:
+    def __init__(self,config):
+        # params are of the form [[[label_0,value_0_0],[label_1,value_1_0],...],[[label_0,value_0_1],...]],...]
+        self.initalParams = config["Parameters:"]
+        self.paramSpace = config["Parameter Space:"]
+        self.paramHistory = []
+    def addParamHistory(self,paramHistory):
+        self.paramHistory = paramHistory
+    def getInitalConditions(self):
+        # return self.removeLabels(self.initalParams)
+        return [x[1] for x in self.initalParams]
+    def getParams(self):
+        return self.removeLabels(self.paramHistory)
+    def removeLabels(self,param):
+        return [[x[1] for x in paramStep] for paramStep in param]
+    def getParamsWithLabels(self):
+        return self.paramHistory
+    def addNewParam(self,newParam):
+        # new params come in the form of just numbers so we have to add the labels
+        self.paramHistory.append(self.initalParams)
+        for i in range(len(newParam)):
+            self.paramHistory[-1][i][1] = newParam[i]
+
+
+         
+
 
 
 class SPOSimulationRunner:
@@ -296,6 +323,7 @@ class SPOSimulationRunner:
         # self.parameters = SPO.parameters
         # self.runsOn = SPO.runsOn
         # self.name = SPO.name
+        self.parameters = SPO.parameters
         self.step = SPO.step
         self.configFile = SPO.configFile
         self.maxJobs = SPO.maxJobs
@@ -314,9 +342,8 @@ class SPOSimulationRunner:
 
     def write_parameters(self):
         paramLog = open(self.path+"/paramlog.txt","w")
-        paramLog.write(str(self.configuration["Parameters:"]))
+        paramLog.write(str(self.parameters.getParamsWithLabels()[-1]))
         paramLog.close()
-
     def setupEnsembleLog(self):
 
         ensembleLog = open(self.path+"/ensembleLog.txt",'w')
@@ -351,7 +378,7 @@ class SPOSimulationRunner:
             self.writeHPCCScript(file)
         else:
             raise Exception("Unrecognized Runs On option.")
-
+            
         file.close()
         os.chmod(self.path+"/"+self.scriptName,0o755)
 
@@ -441,28 +468,39 @@ class SPOSimulationRunnerWithOverHead(SPOSimulationRunner):
 
 
 class SPOOptimizer:
-    def __init__(self,method,maxSteps,currentStep):
+    def __init__(self,method,maxSteps,currentStep,space = None):
         self.method = method
+        if self.method == "Hyperopt":
+            self.space = list(hp.uniform(pspace[0],pspace[1],pspace[2]) for pspace in space)
         self.step = 0
         self.maxSteps = maxSteps
         self.currentStep = currentStep
 
     def get_next_parameters(self,parameters,residual):
-        paramNumbers =[]
-        for param in parameters:
-            paramNumbers.append([x[1] for x in param])
+        paramHistory = parameters.getParams()
+
         try:
-            outPut = minimize(self.objectiveFunction,paramNumbers[0],args=(paramNumbers,residual),
-                method = self.method, options={"maxiter":self.maxSteps,"maxfun":self.currentStep+1,"eps":0.05})
-            if not hasattr(self,'newParam'):
-                print(outPut)
+            if self.method == "Hyperopt":
+                def objectivefn(newParam):
+                     self.pastValues(newParam,paramHistory,residual)
+
+                print("trying Hyperopt")
+                self.outPut = fmin(objectivefn, self.space)
+            else:
+
+                self.outPut = minimize(self.pastValues,parameters.getInitalConditions(),args=(paramHistory,residual),
+                    method = self.method, options={"maxiter":self.maxSteps,"maxfun":self.currentStep+1,"eps":0.05})
+                if not hasattr(self,'newParam'):
+                    self.print(outPut)
         except StopIteration:
             pass
         return self.newParam
 
     def objectiveFunction(self,newParam,parameters,residual):
         # if this is a new parameter
-        if self.step>=len(parameters):
+        print("Step: %d\t # of Params: %d\t # of residuals%d"%(self.step,len(parameters),len(residual)))
+        print(residual)
+        if self.step>=len(residual):
             # save the values
             self.newParam = newParam
             # return 0 to stop the optimization
@@ -470,12 +508,13 @@ class SPOOptimizer:
 
         # if this is not a new parameter make sure our parameter trajectory 
         # is valid
-        if (abs(newParam - parameters[self.step])>1e-6).any():
+        paramDiff = [abs(x-y)>1e-6 for x,y in zip (newParam, parameters[self.step]) ]
+        if any(paramDiff):
             print("encounted error on step %d"%self.step)
             print("List of params is %s"%str(parameters))
             print("I tried to use %s"%str(newParam))
 
-            print(newParam-parameters[self.step])
+            print([x-y for x,y in zip (newParam, parameters[self.step]) ])
             raise Exception("ERROR: encountered Nondeterministic solver")
         # and return the residual
         retVal = residual[self.step]
