@@ -221,6 +221,6 @@ class systemTest(unittest.TestCase):
 
 if __name__ == '__main__':
     mySystemTest=systemTest()
-    # mySystemTest.test_simpleSimulation()
-    mySystemTest.test_hyperopt()
+    mySystemTest.test_simpleSimulation()
+    # mySystemTest.test_hyperopt()
     # unittest.main()
