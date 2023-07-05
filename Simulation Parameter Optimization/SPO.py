@@ -69,10 +69,13 @@ class SimulationParameterOptimizer:
         # self.method = configValues["Method:"]
         self.parameters = SPOParameters(self.configuration)
         self.logFileName = self.configuration["Name:"] +"/" + self.configuration["Name:"] + "Log.txt"
+        self.logFileNameCSV = self.configuration["Name:"] +"/" + self.configuration["Name:"] + "Log.csv"
         self.optimizerLogFile = self.configuration["Name:"] + "OptimizerLog.txt"
+        
+        
 
-        self.configuration["EPS:"] = 1e-2
-        self.configuration["Tolerance:"] = 1e-6
+        self.configuration["EPS:"] = 5e-2
+        self.configuration["Tolerance:"] = 10 #1e-6
         self.configuration["Max Steps:"] =1000
 
 
@@ -169,12 +172,21 @@ class SimulationParameterOptimizer:
                 logFile.write(",")
         logFile.write("}    ")
         logFile.close()
+        
+        # write the secondary csv log file for easy plotting
+        csvLogFile = open(self.logFileNameCSV,'a')
+        for param in latestParam:
+            logFile.write(str(param[1])+',')
+        csvLogFile.close()
 
     def writeResidueLog(self,residue):
         logFile = open(self.logFileName,'a')
         logFile.write("Residue:"+str(residue)+"\n")
         logFile.close()
-
+        
+        csvLogFile = open(self.logFileNameCSV,'a')
+        csvLogFile.write(str(residue)+"\n")
+        csvLogFile.close()
     def writeLogFileHeader(self):
         try:
             os.mkdir(self.configuration["Name:"])
